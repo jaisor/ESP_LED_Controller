@@ -10,6 +10,7 @@
 #include <FastLED.h>
 #include <vector>
 
+#include "wifi/WifiManager.h"
 #include "modes/HoneyOrangeMode.h"
 #include "modes/PaletteMode.h"
 
@@ -26,6 +27,7 @@
 CRGB leds[NUM_LEDS];
 
 std::vector<CBaseMode*> modes;
+CWifiManager *wifiManager;
 
 void setup() {
   delay( 1000 ); // power-up safety delay
@@ -44,6 +46,8 @@ void setup() {
   digitalWrite(LED_PIN_BOARD, HIGH);
 #endif
 
+  wifiManager = new CWifiManager();
+
   modes.push_back(new CPaletteMode(NUM_LEDS, PartyColors_p, 255 / NUM_LEDS));
   modes.push_back(new CPaletteMode(NUM_LEDS, HeatColors_p, 255 / NUM_LEDS));
   modes.push_back(new CPaletteMode(NUM_LEDS, RainbowColors_p, 255 / NUM_LEDS ));
@@ -54,13 +58,15 @@ void setup() {
   modes.push_back(new CHoneyOrangeMode(NUM_LEDS));
 
   Log.notice(F(CR "******************************************" CR));  
-  Log.notice("Setup completed!");
+  Log.noticeln("Setup completed!");
 }
 
 void loop() {
   static uint8_t currentMode = 0;
   static unsigned long tsMillis = millis();
   static bool boardLedOn = false;
+
+  wifiManager->loop();
 
   // Blink board LED
   digitalWrite(13, boardLedOn ? HIGH : LOW);

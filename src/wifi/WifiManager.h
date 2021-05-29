@@ -13,35 +13,30 @@
 #include "BaseManager.h"
 
 typedef enum {
-    WF_CONNECTING = 0,
-    WF_LISTENING = 1
+  WF_CONNECTING = 0,
+  WF_LISTENING = 1
 } wifi_status;
 
 class CWifiManager: public CBaseManager {
 
 private:
-    unsigned long tMillis;
-    wifi_status status;
-    char softAP_SSID[32];
-    char SSID[32];
+  unsigned long tMillis;
+  wifi_status status;
+  char softAP_SSID[32];
+  char SSID[32];
+  bool apMode;
 
-    AsyncWebServer server;
-    
-    void connect();
-    void listen();
+  AsyncWebServer* server;
 
-    void handleRoot();
-    void handleConnect();
+  void connect();
+  void listen();
 
-    String getTempSensorResponse();
-    
-#ifdef LED_EXTERNAL_MATRIX
-    void handleLEDMatrix();
-#endif
-    
+  void handleRoot(AsyncWebServerRequest *request);
+  void handleConnect(AsyncWebServerRequest *request);
+        
 public:
 	CWifiManager();
-    virtual void loop();
+  virtual void loop();
 };
 
 #endif

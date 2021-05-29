@@ -30,9 +30,12 @@ int dBmtoPercentage(int dBm) {
   return quality;
 }
 
-CWifiManager::CWifiManager() {    
+CWifiManager::CWifiManager(): 
+apMode(false) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
+
+  server = new AsyncWebServer(WEB_SERVER_PORT);
 
   connect();
 }
@@ -67,7 +70,12 @@ void CWifiManager::connect() {
     sprintf_P(softAP_SSID, "%s_%i", WIFI_FALLBACK_SSID, chipId);
     Log.infoln("Creating WiFi: '%s'", softAP_SSID);
     
-    WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS);
+    if (WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS)) {
+      apMode = true;
+      Log.infoln("Wifi AP '%s' created, listening on '%s'", softAP_SSID, WiFi.softAPIP().toString().c_str());
+    } else {
+      Log.errorln("Wifi AP faliled");
+    };
 
   }
   
@@ -78,11 +86,11 @@ void CWifiManager::listen() {
   status = WF_LISTENING;
 
   // Web
-  server.on("/", std::bind(&CWifiManager::handleRoot, this));
-  server.on("/connect", HTTP_POST, std::bind(&CWifiManager::handleConnect, this));
-  //server.on("/led/external/matrix", HTTP_POST, std::bind(&CWifiManager::handleLEDMatrix, this));
-  server.begin(WEB_SERVER_PORT);
-  Log.infoln("Web server listening on port %i", WEB_SERVER_PORT);
+  server->on("/", std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
+  server->on("/connect", HTTP_POST, std::bind(&CWifiManager::handleConnect, this, std::placeholders::_1));
+  server->begin();
+  Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
+
 
   // NTP
   Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
@@ -100,12 +108,13 @@ void CWifiManager::listen() {
 }
 
 void CWifiManager::loop() {
-  if (WiFi.status() == WL_CONNECTED || WiFi.status() == WL_NO_SHIELD) {
+
+  if (WiFi.status() == WL_CONNECTED || apMode ) {
     // WiFi is connected
 
     if (status == WF_LISTENING) {  
       // Handle requests
-      server.handleClient();
+      //server.handleClient();
     } else {
       // Start listening for requests
       listen();
@@ -116,15 +125,14 @@ void CWifiManager::loop() {
 
     switch (status) {
       case WF_LISTENING: {
-        Log.infoln("Disconnecting");
-        server.close();
+        Log.infoln("Disconnecting %i", status);
+        server->end();
         status = WF_CONNECTING;
         connect();
       } break;
       case WF_CONNECTING: {
         if (millis() - tMillis > MAX_CONNECT_TIMEOUT_MS) {
-          Log.infoln("Connecting failed, create an AP instead");
-          esp_wifi_stop();
+          Log.warning("Connecting failed (wifi status %i), create an AP instead", WiFi.status());
 
           tMillis = millis();
           strcpy(SSID, "");
@@ -139,7 +147,7 @@ void CWifiManager::loop() {
   
 }
 
-void CWifiManager::handleRoot() {
+void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   digitalWrite(BOARD_LED_PIN, LOW);
   
   char temp[1000];
@@ -151,13 +159,13 @@ void CWifiManager::handleRoot() {
 
            "<html>\
   <head>\
-    <title>ESP32 Demo</title>\
+    <title>ESP8266 LED Leaf</title>\
     <style>\
       body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
     </style>\
   </head>\
   <body>\
-    <h1>ProtoPuck32</h1>\
+    <h1>ESP8266 LED Leaf</h1>\
     <p>Connect to WiFi Access Point (AP)</p>\
     <form method='POST' action='/connect' enctype='application/x-www-form-urlencoded'>\
       <label for='ssid'>SSID (AP Name):</label><br>\
@@ -167,24 +175,20 @@ void CWifiManager::handleRoot() {
       <input type='submit' value='Connect...'>\
     </form>\
     <br><br><hr>\
-    %s\
     <p>Uptime: %02d:%02d:%02d</p>\
   </body>\
 </html>",
-           getTempSensorResponse().c_str(),
            hr, min % 60, sec % 60
           );
-  server.send(200, "text/html", temp);
-
-  digitalWrite(BOARD_LED_PIN, HIGH);
+  
+  request->send(200, "text/html", temp);
   
 }
 
-void CWifiManager::handleConnect() {
-  digitalWrite(BOARD_LED_PIN, LOW);
+void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
 
-  String ssid = server.arg("ssid");
-  String password = server.arg("password");
+  String ssid = request->arg("ssid");
+  String password = request->arg("password");
   
   char temp[1000];
   int sec = millis() / 1000;
@@ -195,13 +199,13 @@ void CWifiManager::handleConnect() {
 
            "<html>\
   <head>\
-    <title>ESP32 Demo</title>\
+    <title>ESP8266 LED Leaf</title>\
     <style>\
       body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
     </style>\
   </head>\
   <body>\
-    <h1>ProtoPuck32</h1>\
+    <h1>ESP8266 LED Leaf</h1>\
     <p>Connecting to '%s' ... see you on the other side!</p>\
     <p>Uptime: %02d:%02d:%02d</p>\
   </body>\
@@ -210,66 +214,15 @@ void CWifiManager::handleConnect() {
     hr, min % 60, sec % 60
   );
 
-  server.send(200, "text/html", temp);
+  request->send(200, "text/html", temp);
 
   ssid.toCharArray(configuration.wifiSsid, sizeof(configuration.wifiSsid));
   password.toCharArray(configuration.wifiPassword, sizeof(configuration.wifiPassword));
 
-  log_i("Saved config SSID: '%s'", configuration.wifiSsid);
+  Log.noticeln("Saved config SSID: '%s'", configuration.wifiSsid);
 
   EEPROM_saveConfig();
 
   strcpy(SSID, configuration.wifiSsid);
   connect();
-
-  digitalWrite(BOARD_LED_PIN, HIGH);
-  
 }
-
-String CWifiManager::getTempSensorResponse() {
-#ifdef TEMP_SENSOR
-  float temp = 12.3f;
-  return String("<div>\
-    Temperature: " + String(temp, 1) + "<br/>\
-    Hunidity: TODO <br/>\
-  </div>");
-#else
-  return "";
-#endif
-}
-
-#ifdef LED_EXTERNAL_MATRIX
-/*
-  Post body should contain comma delimited items in a list like this: X Y RRGGBB,X Y RRGGBB
-  Each item is a space delimited X,Y coordinates of the LED pixel in the matrix and the expected color in Hex
-  Ex: 0 0 ffbbdd,1 0 c91232
-*/
-void CWifiManager::handleLEDMatrix() {
-  digitalWrite(BOARD_LED_PIN, LOW);
-
-  matrix_pixel_t pixels[LED_EXTERNAL_MATRIX_WIDTH * LED_EXTERNAL_MATRIX_HEIGHT];
-
-  String postBody = server.arg("plain");
-  log_d("LED Matrinx: %s", postBody.c_str());
-
-  ioTManager->setLeds(pixels);
-
-/*
-  const char pixelDelimiter[1] = ",";
-  const char *raw = postBody.c_str();
-  char *pixelToken = strtok(raw, pixelDelimiter);
-
-  while( pixelToken != NULL ) {
-    log_d("P: '%s'", pixelToken);
-    pixelToken = strtok(NULL, pixelDelimiter);
-  }
-*/
-  
-  //postBody.indexOf()
-  
-
-  
-  server.send(200, "text/html", "OK");
-  digitalWrite(BOARD_LED_PIN, HIGH);
-}
-#endif
