@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <FastLED.h>
 
+#include "Configuration.h"
+
 class CBaseMode {
 
 protected:

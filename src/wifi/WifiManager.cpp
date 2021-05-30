@@ -10,7 +10,7 @@
 #include "wifi/WifiManager.h"
 #include "Configuration.h"
 
-#define MAX_CONNECT_TIMEOUT_MS 10000 // 10 seconds to connect before creating its own AP
+#define MAX_CONNECT_TIMEOUT_MS 15000 // 10 seconds to connect before creating its own AP
 #define BOARD_LED_PIN 2
 
 const int RSSI_MAX =-50;// define maximum straighten of signal in dBm
@@ -30,13 +30,46 @@ int dBmtoPercentage(int dBm) {
   return quality;
 }
 
+const String htmlTop FL_PROGMEM = "<html>\
+  <head>\
+    <title>ESP8266 LED Leaf</title>\
+    <style>\
+      body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
+    </style>\
+  </head>\
+  <body>\
+    <h1>ESP8266 LED Leaf</h1>";
+
+const String htmlBottom FL_PROGMEM = "<br><br><hr>\
+  <p>Uptime: %02d:%02d:%02d</p>\
+  </body>\
+</html>";
+
+const String htmlWifiApConnectForm FL_PROGMEM = "<p>Connect to WiFi Access Point (AP)</p>\
+    <form method='POST' action='/connect' enctype='application/x-www-form-urlencoded'>\
+      <label for='ssid'>SSID (AP Name):</label><br>\
+      <input type='text' id='ssid' name='ssid'><br><br>\
+      <label for='pass'>Password (WPA2):</label><br>\
+      <input type='password' id='pass' name='password' minlength='8' autocomplete='off' required><br><br>\
+      <input type='submit' value='Connect...'>\
+    </form>";
+
+const String htmlLEDModes FL_PROGMEM = "<hr><p>LED Mode Selector</p>\
+    <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
+      <label for='led_mode'>LED Mode:</label><br>\
+      <select name='led_mode' id='led_mode'>\
+      %s\
+      </select>\
+      <label for='pass'>Frame delay (ms):</label><br>\
+      <input type='text' id='frame_delay' name='frame_delay'required><br><br>\
+      <input type='submit' value='Set...'>\
+    </form>";
+
 CWifiManager::CWifiManager(): 
 apMode(false) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
-
   server = new AsyncWebServer(WEB_SERVER_PORT);
-
   connect();
 }
 
@@ -51,6 +84,7 @@ void CWifiManager::connect() {
     // Join AP from Config
     Log.infoln("Connecting to WiFi: '%s'", SSID);
     WiFi.begin(SSID, configuration.wifiPassword);
+    apMode = false;
     
   } else {
 
@@ -63,10 +97,8 @@ void CWifiManager::connect() {
     #elif ESP8266
       chipId = ESP.getChipId();
     #endif
-    
-
+  
     Log.infoln("Chip ID: '%i'", chipId);
-
     sprintf_P(softAP_SSID, "%s_%i", WIFI_FALLBACK_SSID, chipId);
     Log.infoln("Creating WiFi: '%s'", softAP_SSID);
     
@@ -91,7 +123,6 @@ void CWifiManager::listen() {
   server->begin();
   Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
 
-
   // NTP
   Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
 
@@ -112,10 +143,7 @@ void CWifiManager::loop() {
   if (WiFi.status() == WL_CONNECTED || apMode ) {
     // WiFi is connected
 
-    if (status == WF_LISTENING) {  
-      // Handle requests
-      //server.handleClient();
-    } else {
+    if (status != WF_LISTENING) {  
       // Start listening for requests
       listen();
     }
@@ -132,11 +160,9 @@ void CWifiManager::loop() {
       } break;
       case WF_CONNECTING: {
         if (millis() - tMillis > MAX_CONNECT_TIMEOUT_MS) {
-          Log.warning("Connecting failed (wifi status %i), create an AP instead", WiFi.status());
-
+          Log.warning("Connecting failed (wifi status %i) after %l ms, create an AP instead", (millis() - tMillis), WiFi.status());
           tMillis = millis();
           strcpy(SSID, "");
-
           connect();
         }
       } break;
@@ -148,73 +174,45 @@ void CWifiManager::loop() {
 }
 
 void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
-  digitalWrite(BOARD_LED_PIN, LOW);
+
+  Log.info("handleRoot: AP: %i", apMode);
   
-  char temp[1000];
   int sec = millis() / 1000;
   int min = sec / 60;
   int hr = min / 60;
 
-  snprintf(temp, 1000,
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->printf(htmlTop.c_str());
 
-           "<html>\
-  <head>\
-    <title>ESP8266 LED Leaf</title>\
-    <style>\
-      body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
-    </style>\
-  </head>\
-  <body>\
-    <h1>ESP8266 LED Leaf</h1>\
-    <p>Connect to WiFi Access Point (AP)</p>\
-    <form method='POST' action='/connect' enctype='application/x-www-form-urlencoded'>\
-      <label for='ssid'>SSID (AP Name):</label><br>\
-      <input type='text' id='ssid' name='ssid'><br><br>\
-      <label for='pass'>Password (WPA2):</label><br>\
-      <input type='password' id='pass' name='password' minlength='8' autocomplete='off' required><br><br>\
-      <input type='submit' value='Connect...'>\
-    </form>\
-    <br><br><hr>\
-    <p>Uptime: %02d:%02d:%02d</p>\
-  </body>\
-</html>",
-           hr, min % 60, sec % 60
-          );
+  if (apMode) {
+    response->printf(htmlWifiApConnectForm.c_str());
+  } else {
+    response->printf("<p>Connected to '%s'</p>", SSID);
+  }
   
-  request->send(200, "text/html", temp);
-  
+  response->printf(htmlLEDModes.c_str(), "<option value='0'>Party Colors</option>\
+        <option value='0'>Heat Colors</option>");
+
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  request->send(response);
 }
 
 void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
 
+  Log.info("handleConnect: AP: %i", apMode);
+
   String ssid = request->arg("ssid");
   String password = request->arg("password");
   
-  char temp[1000];
   int sec = millis() / 1000;
   int min = sec / 60;
   int hr = min / 60;
 
-  snprintf(temp, 1000,
-
-           "<html>\
-  <head>\
-    <title>ESP8266 LED Leaf</title>\
-    <style>\
-      body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
-    </style>\
-  </head>\
-  <body>\
-    <h1>ESP8266 LED Leaf</h1>\
-    <p>Connecting to '%s' ... see you on the other side!</p>\
-    <p>Uptime: %02d:%02d:%02d</p>\
-  </body>\
-</html>",
-    ssid.c_str(),
-    hr, min % 60, sec % 60
-  );
-
-  request->send(200, "text/html", temp);
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->printf(htmlTop.c_str());
+  response->printf("<p>Connecting to '%s' ... see you on the other side!</p>", ssid.c_str());
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  request->send(response);
 
   ssid.toCharArray(configuration.wifiSsid, sizeof(configuration.wifiSsid));
   password.toCharArray(configuration.wifiPassword, sizeof(configuration.wifiPassword));

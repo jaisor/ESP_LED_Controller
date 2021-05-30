@@ -28,17 +28,18 @@
 #endif
 
 #ifdef LED
+    #define LED_CHANGE_MODE_SEC   60
     #define LED_PIN 2
     #define LED_STRIP_SIZE 68
     #define LED_EXTERNAL_LEAF_SIZE 68
-    #define LED_BRIGHTNESS 0.2 // 0-1
+    #define LED_BRIGHTNESS 1.0 // 0-1
     #define LED_TYPE WS2811
     #define LED_COLOR_ORDER GRB
 #endif
 
 struct configuration_t {
 
-    bool _loaded; // used to check if EEPROM was empty, should be true
+    char _loaded[6]; // used to check if EEPROM was empty, should be true
 
     #ifdef WIFI
         char wifiSsid[32];
@@ -50,6 +51,9 @@ struct configuration_t {
 
     #ifdef LED
         float ledBrightness;
+        uint8_t ledMode;
+        unsigned long ledDelayMs;
+        unsigned long ledCycleModeMs;
     #endif
 };
 

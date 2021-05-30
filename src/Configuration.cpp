@@ -16,15 +16,21 @@ void EEPROM_loadConfig() {
   EEPROM.begin(sizeof(configuration_t));
   EEPROM.get(EEPROM_CONFIGURATION_START, configuration);
 
-  if (!configuration._loaded) {
+  Log.noticeln("Configuration loaded: %i", configuration._loaded);
+
+  if (strcmp(configuration._loaded, "jaisor")) {
     // blank
     Log.infoln("Blank configuration, loading defaluts");
-    configuration._loaded = true;
+    strcpy(configuration._loaded, "jaisor");
     #ifdef LED
       configuration.ledBrightness = LED_BRIGHTNESS;
       strcpy(configuration.ntpServer, NTP_SERVER);
       configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
       configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
+      configuration.ledMode = 0;
+      configuration.ledCycleModeMs = LED_CHANGE_MODE_SEC * 1000;
+      configuration.ledDelayMs = 10;
+      configuration.ledBrightness = LED_BRIGHTNESS;
     #endif
   }
 
@@ -32,6 +38,18 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.ledBrightness)) {
     Log.verboseln("NaN brightness");
     configuration.ledBrightness = LED_BRIGHTNESS;
+  }
+  if (isnan(configuration.ledMode)) {
+    Log.verboseln("NaN ledMode");
+    configuration.ledMode = 0;
+  }
+  if (isnan(configuration.ledCycleModeMs)) {
+    Log.verboseln("NaN ledCycleModeMs");
+    configuration.ledCycleModeMs = 0;
+  }
+  if (isnan(configuration.ledDelayMs)) {
+    Log.verboseln("NaN ledDelayMs");
+    configuration.ledDelayMs = 10;
   }
 #endif
 
