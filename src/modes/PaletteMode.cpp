@@ -1,15 +1,15 @@
 #include "PaletteMode.h"
 
-CPaletteMode::CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment)
-: CBaseMode(numLeds), increment(increment), palette(palette), blendType(LINEARBLEND), delay(15) {
+CPaletteMode::CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment)
+: CBaseMode(numLeds, name), increment(increment), palette(palette), blendType(LINEARBLEND), delay(15) {
 }
 
-CPaletteMode::CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType)
-: CBaseMode(numLeds), increment(increment), palette(palette), blendType(blendType), delay(15) {
+CPaletteMode::CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType)
+: CBaseMode(numLeds, name), increment(increment), palette(palette), blendType(blendType), delay(15) {
 }
 
-CPaletteMode::CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType, const unsigned long delay)
-: CBaseMode(numLeds), increment(increment), palette(palette), blendType(blendType), delay(delay) {
+CPaletteMode::CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType, const unsigned long delay)
+: CBaseMode(numLeds, name), increment(increment), palette(palette), blendType(blendType), delay(delay) {
 }
 
 void CPaletteMode::draw(CRGB *leds) {

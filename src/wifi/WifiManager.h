@@ -11,6 +11,7 @@
 #include <ESPAsyncWebServer.h>
 
 #include "BaseManager.h"
+#include "modes/BaseMode.h"
 
 typedef enum {
   WF_CONNECTING = 0,
@@ -33,10 +34,14 @@ private:
 
   void handleRoot(AsyncWebServerRequest *request);
   void handleConnect(AsyncWebServerRequest *request);
+
+  std::vector<CBaseMode*> *modes;
         
 public:
 	CWifiManager();
   virtual void loop();
+
+  void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
 };
 
 #endif

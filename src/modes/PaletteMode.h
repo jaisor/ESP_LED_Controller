@@ -12,8 +12,8 @@ private:
     const unsigned long delay;
 
 public:
-	CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment);
-    CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType);
-    CPaletteMode(const uint8_t numLeds, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType, const unsigned long delay);
+	CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment);
+    CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType);
+    CPaletteMode(const uint8_t numLeds, const String name, const TProgmemRGBPalette16& palette, const uint8_t increment, const TBlendType blendType, const unsigned long delay);
     virtual void draw(CRGB *leds);
 };

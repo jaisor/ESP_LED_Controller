@@ -28,7 +28,7 @@ extern const TProgmemRGBPalette16 HoneyOrange_p FL_PROGMEM =
     HONEY_YELLOW,
 };
 
-CHoneyOrangeMode::CHoneyOrangeMode(const uint8_t numLeds)
-: CPaletteMode(numLeds, HoneyOrange_p, 1) {
+CHoneyOrangeMode::CHoneyOrangeMode(const uint8_t numLeds, const String name)
+: CPaletteMode(numLeds, name, HoneyOrange_p, 1) {
     
 }

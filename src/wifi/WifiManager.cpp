@@ -45,7 +45,7 @@ const String htmlBottom FL_PROGMEM = "<br><br><hr>\
   </body>\
 </html>";
 
-const String htmlWifiApConnectForm FL_PROGMEM = "<p>Connect to WiFi Access Point (AP)</p>\
+const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Point (AP)</h2>\
     <form method='POST' action='/connect' enctype='application/x-www-form-urlencoded'>\
       <label for='ssid'>SSID (AP Name):</label><br>\
       <input type='text' id='ssid' name='ssid'><br><br>\
@@ -54,14 +54,22 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<p>Connect to WiFi Access Point
       <input type='submit' value='Connect...'>\
     </form>";
 
-const String htmlLEDModes FL_PROGMEM = "<hr><p>LED Mode Selector</p>\
+const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
       <label for='led_mode'>LED Mode:</label><br>\
       <select name='led_mode' id='led_mode'>\
       %s\
-      </select>\
-      <label for='pass'>Frame delay (ms):</label><br>\
-      <input type='text' id='frame_delay' name='frame_delay'required><br><br>\
+      </select><br>\
+      <br>\
+      <label for='brightness'>Brightness:</label><br>\
+      <input type='text' id='brightness' name='brightness' value='%.2f'> range 0.0-1.0<br>\
+      <br>\
+      <label for='frame_delay'>Frame delay:</label><br>\
+      <input type='text' id='frame_delay' name='frame_delay' value='%i'> milliseconds<br>\
+      <br>\
+      <label for='frame_delay'>Auto cycle modes every:</label><br>\
+      <input type='text' id='frame_delay' name='frame_delay' value='%i'> seconds (0-stay on current mode)<br>\
+      <br>\
       <input type='submit' value='Set...'>\
     </form>";
 
@@ -190,8 +198,14 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     response->printf("<p>Connected to '%s'</p>", SSID);
   }
   
-  response->printf(htmlLEDModes.c_str(), "<option value='0'>Party Colors</option>\
-        <option value='0'>Heat Colors</option>");
+  String modeOptions = "";
+  if (modes != NULL) {
+    for(uint8_t i=0; i<modes->size(); i++) {
+      modeOptions += String("<option value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
+    }
+  }
+  
+  response->printf(htmlLEDModes.c_str(), modeOptions.c_str());
 
   response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
   request->send(response);

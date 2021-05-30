@@ -37,7 +37,7 @@ void setup() {
   Log.noticeln("******************************************");  
 
   FastLED.addLeds<LED_TYPE, LED_PIN_STRIP, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
-  FastLED.setBrightness(255 * configuration.ledBrightness);
+  FastLED.setBrightness(255);
 
 #ifdef LED_PIN_BOARD
   pinMode(LED_PIN_BOARD, OUTPUT);
@@ -48,14 +48,16 @@ void setup() {
 
   wifiManager = new CWifiManager();
 
-  modes.push_back(new CPaletteMode(NUM_LEDS, PartyColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, HeatColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, RainbowColors_p, 255 / NUM_LEDS ));
-  modes.push_back(new CPaletteMode(NUM_LEDS, CloudColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, ForestColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, OceanColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, HeatColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CHoneyOrangeMode(NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Party Colors", PartyColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Heat Colors", HeatColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Rainbow Colors", RainbowColors_p, 255 / NUM_LEDS ));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Cloud Colors", CloudColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Forest Colors", ForestColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Ocean Colors", OceanColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CPaletteMode(NUM_LEDS, "Lava Colors", LavaColors_p, 255 / NUM_LEDS));
+  modes.push_back(new CHoneyOrangeMode(NUM_LEDS, "Honey Amber"));
+
+  wifiManager->setModes(&modes);
 
   Log.noticeln("Setup completed!");
 }

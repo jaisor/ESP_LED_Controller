@@ -10,8 +10,11 @@ class CBaseMode {
 protected:
     unsigned long tMillis;
     const uint8_t numLeds;
+    const String name;
 
 public:
-	CBaseMode(const uint8_t numLeds);
+	CBaseMode(const uint8_t numLeds, const String name);
     virtual void draw(CRGB *leds) {};
+
+    const String getName() { return name; }
 };
