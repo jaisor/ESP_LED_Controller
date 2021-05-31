@@ -64,15 +64,10 @@ void setup() {
 
 void loop() {
   static unsigned long tsMillis = millis();
-  static bool boardLedOn = false;
-
+  
   wifiManager->loop();
 
-  // Blink board LED
-  digitalWrite(13, boardLedOn ? HIGH : LOW);
-  boardLedOn = !boardLedOn;
-
-  //Log.infoln("mode: %i, bright: %i, delay: %l, cycle: %l", configuration.ledMode, 255 * configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs);
+  //Log.infoln("mode: %i, bright: %i, delay: %i, cycle: %i", configuration.ledMode, 10000.0 * configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs);
   if (configuration.ledMode > modes.size()-1) {
     configuration.ledMode = 0;
   }
@@ -80,7 +75,6 @@ void loop() {
   modes[configuration.ledMode]->draw(leds);
 
   FastLED.show(255 * configuration.ledBrightness);
-  FastLED.delay(configuration.ledDelayMs);
 
   if (configuration.ledCycleModeMs > 0) {
     // Change modes every so often 

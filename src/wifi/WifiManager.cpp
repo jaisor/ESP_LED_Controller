@@ -67,8 +67,8 @@ const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
       <label for='frame_delay'>Frame delay:</label><br>\
       <input type='text' id='frame_delay' name='frame_delay' value='%i'> milliseconds<br>\
       <br>\
-      <label for='frame_delay'>Auto cycle modes every:</label><br>\
-      <input type='text' id='frame_delay' name='frame_delay' value='%i'> seconds (0-stay on current mode)<br>\
+      <label for='cycle_delay'>Auto cycle modes every:</label><br>\
+      <input type='text' id='cycle_delay' name='cycle_delay' value='%i'> seconds (0-stay on current mode)<br>\
       <br>\
       <input type='submit' value='Set...'>\
     </form>";
@@ -128,6 +128,7 @@ void CWifiManager::listen() {
   // Web
   server->on("/", std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
   server->on("/connect", HTTP_POST, std::bind(&CWifiManager::handleConnect, this, std::placeholders::_1));
+  server->on("/led_mode", HTTP_POST, std::bind(&CWifiManager::handleLedMode, this, std::placeholders::_1));
   server->begin();
   Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
 
@@ -183,7 +184,7 @@ void CWifiManager::loop() {
 
 void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
 
-  Log.info("handleRoot: AP: %i", apMode);
+  Log.infoln("handleRoot");
   
   int sec = millis() / 1000;
   int min = sec / 60;
@@ -201,11 +202,11 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   String modeOptions = "";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
-      modeOptions += String("<option value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
+      modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
     }
   }
   
-  response->printf(htmlLEDModes.c_str(), modeOptions.c_str());
+  response->printf(htmlLEDModes.c_str(), modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs / 1000);
 
   response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
   request->send(response);
@@ -213,7 +214,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
 
 void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
 
-  Log.info("handleConnect: AP: %i", apMode);
+  Log.info("handleConnect");
 
   String ssid = request->arg("ssid");
   String password = request->arg("password");
@@ -237,4 +238,31 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
 
   strcpy(SSID, configuration.wifiSsid);
   connect();
+}
+
+void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
+
+  Log.info("handleLedMode");
+
+  if (modes != NULL) {
+    uint8_t ledMode = atoi(request->arg("led_mode").c_str());
+    if (ledMode<modes->size()) {
+      configuration.ledMode = ledMode;
+    }
+  }
+
+  float ledBrightness = atof(request->arg("brightness").c_str());
+  if (ledBrightness>=0.0 && ledBrightness<=1.0) {
+    configuration.ledBrightness = ledBrightness;
+  }
+
+  configuration.ledDelayMs = atol(request->arg("frame_delay").c_str());
+  configuration.ledCycleModeMs = atol(request->arg("cycle_delay").c_str());
+    
+  Log.noticeln("ledMode: '%i'", configuration.ledMode);
+  Log.noticeln("ledBrightness: '%.2f'", configuration.ledBrightness);
+
+  EEPROM_saveConfig();
+  
+  request->redirect("/");
 }

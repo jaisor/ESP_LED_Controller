@@ -34,6 +34,7 @@ private:
 
   void handleRoot(AsyncWebServerRequest *request);
   void handleConnect(AsyncWebServerRequest *request);
+  void handleLedMode(AsyncWebServerRequest *request);
 
   std::vector<CBaseMode*> *modes;
         

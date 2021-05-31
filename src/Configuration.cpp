@@ -16,11 +16,11 @@ void EEPROM_loadConfig() {
   EEPROM.begin(sizeof(configuration_t));
   EEPROM.get(EEPROM_CONFIGURATION_START, configuration);
 
-  Log.noticeln("Configuration loaded: %i", configuration._loaded);
+  Log.noticeln("Configuration loaded: %s", configuration._loaded);
 
   if (strcmp(configuration._loaded, "jaisor")) {
     // blank
-    Log.infoln("Blank configuration, loading defaluts");
+    Log.infoln("Blank configuration, loading defaults");
     strcpy(configuration._loaded, "jaisor");
     #ifdef LED
       configuration.ledBrightness = LED_BRIGHTNESS;

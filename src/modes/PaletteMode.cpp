@@ -14,7 +14,7 @@ CPaletteMode::CPaletteMode(const uint8_t numLeds, const String name, const TProg
 
 void CPaletteMode::draw(CRGB *leds) {
 
-    if (millis() - tMillis > delay) {
+    if (millis() - tMillis > configuration.ledDelayMs) {
         tMillis = millis();
         startIndex = startIndex + 1;
     }

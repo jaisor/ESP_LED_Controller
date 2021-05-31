@@ -39,7 +39,7 @@
 
 struct configuration_t {
 
-    char _loaded[6]; // used to check if EEPROM was empty, should be true
+    char _loaded[7]; // used to check if EEPROM was empty, should be true
 
     #ifdef WIFI
         char wifiSsid[32];
