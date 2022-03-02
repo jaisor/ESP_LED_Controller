@@ -14,14 +14,7 @@
 #include "modes/HoneyOrangeMode.h"
 #include "modes/PaletteMode.h"
 
-//#define LED_PIN_BOARD     2
-#define LED_PIN_STRIP     2
-#define NUM_LEDS          71
-
-#define LED_TYPE    WS2811
-#define COLOR_ORDER GRB
-
-CRGB leds[NUM_LEDS];
+CRGB leds[LED_STRIP_SIZE];
 
 std::vector<CBaseMode*> modes;
 CWifiManager *wifiManager;
@@ -36,7 +29,7 @@ void setup() {
   Log.begin(LOG_LEVEL_VERBOSE, &Serial);
   Log.noticeln("******************************************");  
 
-  FastLED.addLeds<LED_TYPE, LED_PIN_STRIP, COLOR_ORDER>(leds, NUM_LEDS).setCorrection( TypicalLEDStrip );
+  FastLED.addLeds<LED_TYPE, LED_PIN, LED_COLOR_ORDER>(leds, LED_STRIP_SIZE).setCorrection( TypicalLEDStrip );
   FastLED.setBrightness(255);
 
 #ifdef LED_PIN_BOARD
@@ -48,14 +41,14 @@ void setup() {
 
   wifiManager = new CWifiManager();
 
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Party Colors", PartyColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Heat Colors", HeatColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Rainbow Colors", RainbowColors_p, 255 / NUM_LEDS ));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Cloud Colors", CloudColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Forest Colors", ForestColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Ocean Colors", OceanColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CPaletteMode(NUM_LEDS, "Lava Colors", LavaColors_p, 255 / NUM_LEDS));
-  modes.push_back(new CHoneyOrangeMode(NUM_LEDS, "Honey Amber"));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Party Colors", PartyColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Heat Colors", HeatColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Rainbow Colors", RainbowColors_p, 255 / LED_STRIP_SIZE ));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Cloud Colors", CloudColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Forest Colors", ForestColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Ocean Colors", OceanColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Lava Colors", LavaColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CHoneyOrangeMode(LED_STRIP_SIZE, "Honey Amber"));
 
   wifiManager->setModes(&modes);
 

@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <WiFiClient.h>
 #include <ezTime.h>
-
+#include <AsyncElegantOTA.h>
 
 #include "wifi/WifiManager.h"
 #include "Configuration.h"
@@ -134,6 +134,9 @@ void CWifiManager::listen() {
 
   // NTP
   Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
+
+  // OTA
+  AsyncElegantOTA.begin(server);
 
   configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
   struct tm timeinfo;

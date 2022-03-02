@@ -30,9 +30,9 @@
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
     #define LED_PIN 2
-    #define LED_STRIP_SIZE 68
+    #define LED_STRIP_SIZE 239
     #define LED_EXTERNAL_LEAF_SIZE 68
-    #define LED_BRIGHTNESS 1.0 // 0-1
+    #define LED_BRIGHTNESS 0.3 // 0-1
     #define LED_TYPE WS2811
     #define LED_COLOR_ORDER GRB
 #endif
