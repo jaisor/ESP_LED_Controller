@@ -12,11 +12,11 @@
 #define EEPROM_CONFIGURATION_START 0    // First EEPROM byte to be used for storing the configuration
 
 #ifdef WIFI
-    #define WIFI_SSID "LEDTri8266"
+    #define WIFI_SSID "ESP8266LED"
     #define WIFI_PASS "password123"
 
     // If unable to connect, it will create a soft accesspoint
-    #define WIFI_FALLBACK_SSID "LEDT" // device chip id will be suffixed
+    #define WIFI_FALLBACK_SSID "E8266LED" // device chip id will be suffixed
     #define WIFI_FALLBACK_PASS "password123"
 
     #define NTP_SERVER "pool.ntp.org"
@@ -30,10 +30,9 @@
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
     #define LED_PIN 2
-    #define LED_STRIP_SIZE 239
-    #define LED_EXTERNAL_LEAF_SIZE 68
-    #define LED_BRIGHTNESS 0.3 // 0-1
-    #define LED_TYPE WS2811
+    #define LED_STRIP_SIZE 267  // 267 for Ring Light
+    #define LED_BRIGHTNESS 0.1 // 0-1
+    #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
 #endif
 

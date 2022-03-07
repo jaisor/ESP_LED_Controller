@@ -13,6 +13,8 @@
 #include "wifi/WifiManager.h"
 #include "modes/HoneyOrangeMode.h"
 #include "modes/PaletteMode.h"
+#include "modes/DualRingMode.h"
+#include "modes/WhiteLightMode.h"
 
 CRGB leds[LED_STRIP_SIZE];
 
@@ -41,15 +43,17 @@ void setup() {
 
   wifiManager = new CWifiManager();
 
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Party Colors", PartyColors_p, 255 / LED_STRIP_SIZE));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Heat Colors", HeatColors_p, 255 / LED_STRIP_SIZE));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Rainbow Colors", RainbowColors_p, 255 / LED_STRIP_SIZE ));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Cloud Colors", CloudColors_p, 255 / LED_STRIP_SIZE));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Forest Colors", ForestColors_p, 255 / LED_STRIP_SIZE));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Ocean Colors", OceanColors_p, 255 / LED_STRIP_SIZE));
-  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Lava Colors", LavaColors_p, 255 / LED_STRIP_SIZE));
+  modes.push_back(new CWhiteLightMode(LED_STRIP_SIZE, "White Light"));
+  modes.push_back(new CDualRingMode(LED_STRIP_SIZE, "Dual Ring"));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Party Colors", PartyColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  //modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Heat Colors", HeatColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Rainbow Colors", RainbowColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Cloud Colors", CloudColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  //modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Forest Colors", ForestColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  //modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Ocean Colors", OceanColors_p, 255.0 / (float)LED_STRIP_SIZE));
+  //modes.push_back(new CPaletteMode(LED_STRIP_SIZE, "Lava Colors", LavaColors_p, 255.0 / (float)LED_STRIP_SIZE));
   modes.push_back(new CHoneyOrangeMode(LED_STRIP_SIZE, "Honey Amber"));
-
+  
   wifiManager->setModes(&modes);
 
   Log.noticeln("Setup completed!");
@@ -65,8 +69,8 @@ void loop() {
     configuration.ledMode = 0;
   }
 
+  memset(leds, 0, sizeof(CRGB)*LED_STRIP_SIZE);
   modes[configuration.ledMode]->draw(leds);
-
   FastLED.show(255 * configuration.ledBrightness);
 
   if (configuration.ledCycleModeMs > 0) {

@@ -32,13 +32,13 @@ int dBmtoPercentage(int dBm) {
 
 const String htmlTop FL_PROGMEM = "<html>\
   <head>\
-    <title>ESP8266 LED Leaf</title>\
+    <title>ESP8266 LED Controller</title>\
     <style>\
       body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
     </style>\
   </head>\
   <body>\
-    <h1>ESP8266 LED Leaf</h1>";
+    <h1>ESP8266 LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
   <p>Uptime: %02d:%02d:%02d</p>\
