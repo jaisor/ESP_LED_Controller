@@ -1,10 +1,10 @@
-#include "DualRingMode.h"
+#include "ColorSplitMode.h"
 
-CDualRingMode::CDualRingMode(const uint16_t numLeds, const String name)
+CColorSplitMode::CColorSplitMode(const uint16_t numLeds, const String name)
 : CBaseMode(numLeds, name), increment(255.0 / (float)numLeds), blendType(LINEARBLEND), delay(15) {
 }
 
-void CDualRingMode::draw(CRGB *leds) {
+void CColorSplitMode::draw(CRGB *leds) {
 
     if (millis() - tMillis > configuration.ledDelayMs) {
         tMillis = millis();

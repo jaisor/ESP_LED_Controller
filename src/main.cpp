@@ -3,7 +3,7 @@
 #include <ArduinoLog.h>
 
 
-#ifndef ESP8266
+#if !( defined(ESP32) ) && !( defined(ESP8266) )
   #error This code is intended to run on ESP8266 platform! Please check your Tools->Board setting.
 #endif
 
@@ -13,13 +13,16 @@
 #include "wifi/WifiManager.h"
 #include "modes/HoneyOrangeMode.h"
 #include "modes/PaletteMode.h"
-#include "modes/DualRingMode.h"
+#include "modes/ColorSplitMode.h"
 #include "modes/WhiteLightMode.h"
 
 CRGB* leds;
 
 std::vector<CBaseMode*> modes;
 CWifiManager *wifiManager;
+
+unsigned long tsSmoothBoot;
+bool smoothBoot;
 
 void setup() {
   delay( 1000 ); // power-up safety delay
@@ -36,6 +39,14 @@ void setup() {
   digitalWrite(LED_PIN_BOARD, HIGH);
 #endif
 
+  if (EEPROM_initAndCheckFactoryReset() >= 3) {
+    Log.warningln("Factory reset conditions met!");
+    EEPROM_wipe();    
+  }
+
+  tsSmoothBoot = millis();
+  smoothBoot = false;
+
   EEPROM_loadConfig();
 
   leds = new CRGB[configuration.ledStripSize];
@@ -46,7 +57,7 @@ void setup() {
   wifiManager = new CWifiManager();
 
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
-  modes.push_back(new CDualRingMode(configuration.ledStripSize, "Dual Ring"));
+  modes.push_back(new CColorSplitMode(configuration.ledStripSize, "Dual Ring"));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   //modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
@@ -63,6 +74,12 @@ void setup() {
 
 void loop() {
   static unsigned long tsMillis = millis();
+
+  if (!smoothBoot && millis() - tsSmoothBoot > FACTORY_RESET_CLEAR_TIMER_MS) {
+    smoothBoot = true;
+    EEPROM_clearFactoryReset();
+    Log.noticeln("Device booted smoothly!");
+  }
   
   wifiManager->loop();
 

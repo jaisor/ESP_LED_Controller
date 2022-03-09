@@ -2,7 +2,7 @@
 
 #include "BaseMode.h"
 
-class CDualRingMode : public CBaseMode {
+class CColorSplitMode : public CBaseMode {
 
 private:
     uint8_t startIndex = 0;
@@ -12,6 +12,6 @@ private:
     const unsigned long delay;
 
 public:
-	CDualRingMode(const uint16_t numLeds, const String name);
+	CColorSplitMode(const uint16_t numLeds, const String name);
     virtual void draw(CRGB *leds);
 };

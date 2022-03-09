@@ -4,6 +4,27 @@
 
 configuration_t configuration;
 
+uint8_t EEPROM_initAndCheckFactoryReset() {
+  Log.noticeln("Configuration size: %i", sizeof(configuration_t));
+  
+  EEPROM.begin(sizeof(configuration_t) + EEPROM_FACTORY_RESET + 1);
+  uint8_t resetCounter = EEPROM.read(EEPROM_FACTORY_RESET);
+
+  Log.noticeln("Factory reset counter: %i", resetCounter);
+  Log.noticeln("EEPROM length: %i", EEPROM.length());
+
+  // Bump reset counter
+  EEPROM.write(EEPROM_FACTORY_RESET, resetCounter + 1);
+  EEPROM.commit();
+
+  return resetCounter;
+}
+
+void EEPROM_clearFactoryReset() {
+  EEPROM.write(EEPROM_FACTORY_RESET, 0);
+  EEPROM.commit();
+}
+
 void EEPROM_saveConfig() {
   Log.infoln("Saving configuration to EEPROM");
   EEPROM.put(EEPROM_CONFIGURATION_START, configuration);
@@ -13,7 +34,6 @@ void EEPROM_saveConfig() {
 void EEPROM_loadConfig() {
 
   memset(&configuration, 0, sizeof(configuration_t));
-  EEPROM.begin(sizeof(configuration_t));
   EEPROM.get(EEPROM_CONFIGURATION_START, configuration);
 
   Log.noticeln("Configuration loaded: %s", configuration._loaded);

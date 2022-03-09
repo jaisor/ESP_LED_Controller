@@ -9,7 +9,10 @@
 #define LED         // Individually addressible LED strip
 //#define KEYPAD      // Buttons
 
-#define EEPROM_CONFIGURATION_START 0    // First EEPROM byte to be used for storing the configuration
+#define EEPROM_FACTORY_RESET 0           // Byte to be used for factory reset device fails to start or is rebooted within 1 sec 3 consequitive times
+#define EEPROM_CONFIGURATION_START 1     // First EEPROM byte to be used for storing the configuration
+
+#define FACTORY_RESET_CLEAR_TIMER_MS 3000   // Clear factory reset counter when elapsed, considered smooth boot
 
 #ifdef ESP32
   #define DEVICE_NAME "ESP32LED"
@@ -35,16 +38,18 @@
 
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
-    #define LED_PIN 2
+    #ifdef ESP32
+        #define LED_PIN 12
+    #elif ESP8266
+        #define LED_PIN 2
+    #endif
     #define LED_STRIP_SIZE 300  // 267 for RingLight, 300 for PingPong table light
-    #define LED_BRIGHTNESS 0.1 // 0-1
+    #define LED_BRIGHTNESS 0.1  // 0-1
     #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
 #endif
 
 struct configuration_t {
-
-    char _loaded[7]; // used to check if EEPROM was empty, should be true
 
     #ifdef WIFI
         char wifiSsid[32];
@@ -63,9 +68,14 @@ struct configuration_t {
     #endif
 
     char name[63];
+
+    char _loaded[7]; // used to check if EEPROM was correctly set
 };
 
 extern configuration_t configuration;
+
+uint8_t EEPROM_initAndCheckFactoryReset();
+void EEPROM_clearFactoryReset();
 
 void EEPROM_saveConfig();
 void EEPROM_loadConfig();

@@ -1,5 +1,5 @@
-#if !( defined(ESP32) ) && !ESP8266
-  #error This code is intended to run on ESP8266 platform! Please check your Tools->Board setting.
+#if !( defined(ESP32) ) && !( defined(ESP8266) )
+  #error This code is intended to run on ESP8266 or ESP32 platform!
 #endif
 
 #include <Arduino.h>
@@ -160,7 +160,11 @@ void CWifiManager::loop() {
 
   if (rebootNeeded) {
     Log.noticeln("Rebooting...");
+#ifdef ESP32
     ESP.reset();
+#elif ESP8266
+    ESP.reset();
+#endif
     return;
   }
 
