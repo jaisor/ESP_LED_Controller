@@ -4,5 +4,5 @@
 
 class CHoneyOrangeMode : public CPaletteMode {
 public:
-	CHoneyOrangeMode(const uint8_t numLeds, const String name);
+	CHoneyOrangeMode(const uint16_t numLeds, const String name);
 };

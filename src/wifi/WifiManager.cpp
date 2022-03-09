@@ -1,5 +1,5 @@
-#ifndef ESP8266
-  #error This code is intended to run on ESP8266 platform! Please check your Tools->Board setting.
+#if !( defined(ESP32) ) && !( defined(ESP8266) )
+  #error This code is intended to run on ESP8266 or ESP32 platform!
 #endif
 
 #include <Arduino.h>
@@ -32,16 +32,16 @@ int dBmtoPercentage(int dBm) {
 
 const String htmlTop FL_PROGMEM = "<html>\
   <head>\
-    <title>ESP8266 LED Leaf</title>\
+    <title>%s</title>\
     <style>\
       body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
     </style>\
   </head>\
   <body>\
-    <h1>ESP8266 LED Leaf</h1>";
+    <h1>%s LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
-  <p>Uptime: %02d:%02d:%02d</p>\
+  <p>Uptime: %02d:%02d:%02d | Device: %s</p>\
   </body>\
 </html>";
 
@@ -56,6 +56,12 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Poin
 
 const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
+      <label for='ssid'>Device name:</label><br>\
+      <input type='text' id='deviceName' name='deviceName' value='%s'><br>\
+      <br>\
+      <label for='frame_delay'>LED strip length:</label><br>\
+      <input type='text' id='led_strip_size' name='led_strip_size' value='%i'> LEDs<br>\
+      <br>\
       <label for='led_mode'>LED Mode:</label><br>\
       <select name='led_mode' id='led_mode'>\
       %s\
@@ -74,7 +80,7 @@ const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     </form>";
 
 CWifiManager::CWifiManager(): 
-apMode(false) {    
+apMode(false), rebootNeeded(false) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
@@ -108,7 +114,7 @@ void CWifiManager::connect() {
   
     Log.infoln("Chip ID: '%i'", chipId);
     sprintf_P(softAP_SSID, "%s_%i", WIFI_FALLBACK_SSID, chipId);
-    Log.infoln("Creating WiFi: '%s'", softAP_SSID);
+    Log.infoln("Creating WiFi: '%s' / '%s'", softAP_SSID, WIFI_FALLBACK_PASS);
     
     if (WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS)) {
       apMode = true;
@@ -152,6 +158,16 @@ void CWifiManager::listen() {
 
 void CWifiManager::loop() {
 
+  if (rebootNeeded && millis() - tMillis > 200) {
+    Log.noticeln("Rebooting...");
+#ifdef ESP32
+    ESP.restart();
+#elif ESP8266
+    ESP.reset();
+#endif
+    return;
+  }
+
   if (WiFi.status() == WL_CONNECTED || apMode ) {
     // WiFi is connected
 
@@ -194,7 +210,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str());
+  response->printf(htmlTop.c_str(), configuration.name, configuration.name);
 
   if (apMode) {
     response->printf(htmlWifiApConnectForm.c_str());
@@ -209,9 +225,11 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     }
   }
   
-  response->printf(htmlLEDModes.c_str(), modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs / 1000);
+  response->printf(htmlLEDModes.c_str(), configuration.name, configuration.ledStripSize, 
+    modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, 
+    configuration.ledCycleModeMs / 1000);
 
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
   request->send(response);
 }
 
@@ -227,9 +245,9 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str());
+  response->printf(htmlTop.c_str(), configuration.name, configuration.name);
   response->printf("<p>Connecting to '%s' ... see you on the other side!</p>", ssid.c_str());
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
   request->send(response);
 
   ssid.toCharArray(configuration.wifiSsid, sizeof(configuration.wifiSsid));
@@ -247,6 +265,11 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
 
   Log.info("handleLedMode");
 
+  String deviceName = request->arg("deviceName");
+  deviceName.toCharArray(configuration.name, sizeof(configuration.name));
+  Log.noticeln("Device req name: %s", deviceName);
+  Log.noticeln("Device size %i name: %s", sizeof(configuration.name), configuration.name);
+
   if (modes != NULL) {
     uint8_t ledMode = atoi(request->arg("led_mode").c_str());
     if (ledMode<modes->size()) {
@@ -260,10 +283,18 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   }
 
   configuration.ledDelayMs = atol(request->arg("frame_delay").c_str());
-  configuration.ledCycleModeMs = atol(request->arg("cycle_delay").c_str());
+  configuration.ledCycleModeMs = atol(request->arg("cycle_delay").c_str()) * 1000;
     
   Log.noticeln("ledMode: '%i'", configuration.ledMode);
-  Log.noticeln("ledBrightness: '%.2f'", configuration.ledBrightness);
+  Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
+
+  uint16_t ledStripSize = atol(request->arg("led_strip_size").c_str());
+  if (configuration.ledStripSize != ledStripSize) {
+    Log.noticeln("ledStripSize: '%i'", ledStripSize);
+    configuration.ledStripSize = ledStripSize;
+    tMillis = millis();
+    rebootNeeded = true;
+  }
 
   EEPROM_saveConfig();
   

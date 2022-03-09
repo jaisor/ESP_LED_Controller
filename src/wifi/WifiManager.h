@@ -26,6 +26,8 @@ private:
   char softAP_SSID[32];
   char SSID[32];
   bool apMode;
+  bool rebootNeeded;
+  
 
   AsyncWebServer* server;
 
@@ -43,6 +45,7 @@ public:
   virtual void loop();
 
   void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
+  bool isRebootNeeded() { return rebootNeeded; }
 };
 
 #endif
