@@ -81,6 +81,7 @@ void loop() {
       if (configuration.ledMode > modes.size()-1) {
         configuration.ledMode = 0;
       }
+      Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }
 }

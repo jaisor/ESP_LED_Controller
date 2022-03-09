@@ -1,4 +1,4 @@
-#ifndef ESP8266
+#if !( defined(ESP32) ) && !ESP8266
   #error This code is intended to run on ESP8266 platform! Please check your Tools->Board setting.
 #endif
 
@@ -32,13 +32,13 @@ int dBmtoPercentage(int dBm) {
 
 const String htmlTop FL_PROGMEM = "<html>\
   <head>\
-    <title>ESP8266 LED Controller</title>\
+    <title>%s</title>\
     <style>\
       body { background-color: #303030; font-family: 'Anaheim',sans-serif; Color: #d8d8d8; }\
     </style>\
   </head>\
   <body>\
-    <h1>ESP8266 LED Controller</h1>";
+    <h1>%s LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
   <p>Uptime: %02d:%02d:%02d</p>\
@@ -56,6 +56,8 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Poin
 
 const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
+      <label for='ssid'>Device name:</label><br>\
+      <input type='text' id='deviceName' name='deviceName' value='%s'><br><br>\
       <label for='led_mode'>LED Mode:</label><br>\
       <select name='led_mode' id='led_mode'>\
       %s\
@@ -108,7 +110,7 @@ void CWifiManager::connect() {
   
     Log.infoln("Chip ID: '%i'", chipId);
     sprintf_P(softAP_SSID, "%s_%i", WIFI_FALLBACK_SSID, chipId);
-    Log.infoln("Creating WiFi: '%s'", softAP_SSID);
+    Log.infoln("Creating WiFi: '%s' / '%s'", softAP_SSID, WIFI_FALLBACK_PASS);
     
     if (WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS)) {
       apMode = true;
@@ -194,7 +196,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str());
+  response->printf(htmlTop.c_str(), String(configuration.name), String(configuration.name));
 
   if (apMode) {
     response->printf(htmlWifiApConnectForm.c_str());
@@ -209,7 +211,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     }
   }
   
-  response->printf(htmlLEDModes.c_str(), modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs / 1000);
+  response->printf(htmlLEDModes.c_str(), String(configuration.name), modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs / 1000);
 
   response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
   request->send(response);
@@ -227,7 +229,7 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str());
+  response->printf(htmlTop.c_str(), String(configuration.name), String(configuration.name));
   response->printf("<p>Connecting to '%s' ... see you on the other side!</p>", ssid.c_str());
   response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
   request->send(response);
@@ -247,6 +249,9 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
 
   Log.info("handleLedMode");
 
+  String deviceName = request->arg("deviceName");
+  deviceName.toCharArray(configuration.name, sizeof(configuration.name));
+
   if (modes != NULL) {
     uint8_t ledMode = atoi(request->arg("led_mode").c_str());
     if (ledMode<modes->size()) {
@@ -260,10 +265,10 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   }
 
   configuration.ledDelayMs = atol(request->arg("frame_delay").c_str());
-  configuration.ledCycleModeMs = atol(request->arg("cycle_delay").c_str());
+  configuration.ledCycleModeMs = atol(request->arg("cycle_delay").c_str()) * 1000;
     
   Log.noticeln("ledMode: '%i'", configuration.ledMode);
-  Log.noticeln("ledBrightness: '%.2f'", configuration.ledBrightness);
+  Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
 
   EEPROM_saveConfig();
   

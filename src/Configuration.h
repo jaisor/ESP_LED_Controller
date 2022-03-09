@@ -11,12 +11,18 @@
 
 #define EEPROM_CONFIGURATION_START 0    // First EEPROM byte to be used for storing the configuration
 
+#ifdef ESP32
+  #define DEVICE_NAME "ESP32LED"
+#elif ESP8266
+  #define DEVICE_NAME "ESP8266LED"
+#endif
+
 #ifdef WIFI
-    #define WIFI_SSID "ESP8266LED"
+    #define WIFI_SSID "ESP32LED"
     #define WIFI_PASS "password123"
 
     // If unable to connect, it will create a soft accesspoint
-    #define WIFI_FALLBACK_SSID "E8266LED" // device chip id will be suffixed
+    #define WIFI_FALLBACK_SSID "E32LED" // device chip id will be suffixed
     #define WIFI_FALLBACK_PASS "password123"
 
     #define NTP_SERVER "pool.ntp.org"
@@ -30,7 +36,7 @@
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
     #define LED_PIN 2
-    #define LED_STRIP_SIZE 267  // 267 for Ring Light
+    #define LED_STRIP_SIZE 300  // 267 for RingLight, 300 for PingPong table light
     #define LED_BRIGHTNESS 0.1 // 0-1
     #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
@@ -54,6 +60,8 @@ struct configuration_t {
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
     #endif
+
+    char name[63];
 };
 
 extern configuration_t configuration;

@@ -1,6 +1,6 @@
 #include "DualRingMode.h"
 
-#define RING_1_SIZE 141
+#define RING_1_SIZE 150
 
 /*
 extern const TProgmemRGBPalette16 Ring1_p FL_PROGMEM =
