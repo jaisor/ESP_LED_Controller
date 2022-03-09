@@ -43,8 +43,8 @@
     #elif ESP8266
         #define LED_PIN 2
     #endif
-    #define LED_STRIP_SIZE 300  // 267 for RingLight, 300 for PingPong table light
-    #define LED_BRIGHTNESS 0.1  // 0-1
+    #define LED_STRIP_SIZE 240  // 267 for RingLight, 240 for PingPong table light
+    #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
     #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
 #endif
@@ -67,7 +67,7 @@ struct configuration_t {
         uint16_t ledStripSize;
     #endif
 
-    char name[63];
+    char name[128];
 
     char _loaded[7]; // used to check if EEPROM was correctly set
 };

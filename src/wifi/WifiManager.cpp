@@ -41,7 +41,7 @@ const String htmlTop FL_PROGMEM = "<html>\
     <h1>%s LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
-  <p>Uptime: %02d:%02d:%02d</p>\
+  <p>Uptime: %02d:%02d:%02d | Device: %s</p>\
   </body>\
 </html>";
 
@@ -158,10 +158,10 @@ void CWifiManager::listen() {
 
 void CWifiManager::loop() {
 
-  if (rebootNeeded) {
+  if (rebootNeeded && millis() - tMillis > 200) {
     Log.noticeln("Rebooting...");
 #ifdef ESP32
-    ESP.reset();
+    ESP.restart();
 #elif ESP8266
     ESP.reset();
 #endif
@@ -210,7 +210,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str(), String(configuration.name), String(configuration.name));
+  response->printf(htmlTop.c_str(), configuration.name, configuration.name);
 
   if (apMode) {
     response->printf(htmlWifiApConnectForm.c_str());
@@ -225,11 +225,11 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     }
   }
   
-  response->printf(htmlLEDModes.c_str(), String(configuration.name), configuration.ledStripSize, 
+  response->printf(htmlLEDModes.c_str(), configuration.name, configuration.ledStripSize, 
     modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, 
     configuration.ledCycleModeMs / 1000);
 
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
   request->send(response);
 }
 
@@ -245,9 +245,9 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
   int hr = min / 60;
 
   AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->printf(htmlTop.c_str(), String(configuration.name), String(configuration.name));
+  response->printf(htmlTop.c_str(), configuration.name, configuration.name);
   response->printf("<p>Connecting to '%s' ... see you on the other side!</p>", ssid.c_str());
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
   request->send(response);
 
   ssid.toCharArray(configuration.wifiSsid, sizeof(configuration.wifiSsid));
@@ -267,6 +267,8 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
 
   String deviceName = request->arg("deviceName");
   deviceName.toCharArray(configuration.name, sizeof(configuration.name));
+  Log.noticeln("Device req name: %s", deviceName);
+  Log.noticeln("Device size %i name: %s", sizeof(configuration.name), configuration.name);
 
   if (modes != NULL) {
     uint8_t ledMode = atoi(request->arg("led_mode").c_str());
@@ -290,6 +292,7 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   if (configuration.ledStripSize != ledStripSize) {
     Log.noticeln("ledStripSize: '%i'", ledStripSize);
     configuration.ledStripSize = ledStripSize;
+    tMillis = millis();
     rebootNeeded = true;
   }
 

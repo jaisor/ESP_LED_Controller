@@ -90,11 +90,12 @@ void EEPROM_loadConfig() {
   }
 #endif
 
+  Log.noticeln("Device name: %s", configuration.name);
+
   // FIXME: Always default NTP values
   strcpy(configuration.ntpServer, NTP_SERVER);
   configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
   configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
-  strcpy(configuration.name, DEVICE_NAME);
 }
 
 void EEPROM_wipe() {
