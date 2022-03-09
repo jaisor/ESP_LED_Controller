@@ -57,7 +57,11 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Poin
 const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
       <label for='ssid'>Device name:</label><br>\
-      <input type='text' id='deviceName' name='deviceName' value='%s'><br><br>\
+      <input type='text' id='deviceName' name='deviceName' value='%s'><br>\
+      <br>\
+      <label for='frame_delay'>LED strip length:</label><br>\
+      <input type='text' id='led_strip_size' name='led_strip_size' value='%i'> LEDs<br>\
+      <br>\
       <label for='led_mode'>LED Mode:</label><br>\
       <select name='led_mode' id='led_mode'>\
       %s\
@@ -76,7 +80,7 @@ const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     </form>";
 
 CWifiManager::CWifiManager(): 
-apMode(false) {    
+apMode(false), rebootNeeded(false) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
@@ -154,6 +158,12 @@ void CWifiManager::listen() {
 
 void CWifiManager::loop() {
 
+  if (rebootNeeded) {
+    Log.noticeln("Rebooting...");
+    ESP.reset();
+    return;
+  }
+
   if (WiFi.status() == WL_CONNECTED || apMode ) {
     // WiFi is connected
 
@@ -211,7 +221,9 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     }
   }
   
-  response->printf(htmlLEDModes.c_str(), String(configuration.name), modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs / 1000);
+  response->printf(htmlLEDModes.c_str(), String(configuration.name), configuration.ledStripSize, 
+    modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, 
+    configuration.ledCycleModeMs / 1000);
 
   response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60);
   request->send(response);
@@ -269,6 +281,13 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
     
   Log.noticeln("ledMode: '%i'", configuration.ledMode);
   Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
+
+  uint16_t ledStripSize = atol(request->arg("led_strip_size").c_str());
+  if (configuration.ledStripSize != ledStripSize) {
+    Log.noticeln("ledStripSize: '%i'", ledStripSize);
+    configuration.ledStripSize = ledStripSize;
+    rebootNeeded = true;
+  }
 
   EEPROM_saveConfig();
   

@@ -18,11 +18,11 @@
 #endif
 
 #ifdef WIFI
-    #define WIFI_SSID "ESP32LED"
+    #define WIFI_SSID DEVICE_NAME
     #define WIFI_PASS "password123"
 
     // If unable to connect, it will create a soft accesspoint
-    #define WIFI_FALLBACK_SSID "E32LED" // device chip id will be suffixed
+    #define WIFI_FALLBACK_SSID DEVICE_NAME // device chip id will be suffixed
     #define WIFI_FALLBACK_PASS "password123"
 
     #define NTP_SERVER "pool.ntp.org"
@@ -59,6 +59,7 @@ struct configuration_t {
         uint8_t ledMode;
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
+        uint16_t ledStripSize;
     #endif
 
     char name[63];

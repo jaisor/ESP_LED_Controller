@@ -32,6 +32,7 @@ void EEPROM_loadConfig() {
       configuration.ledCycleModeMs = LED_CHANGE_MODE_SEC * 1000;
       configuration.ledDelayMs = 10;
       configuration.ledBrightness = LED_BRIGHTNESS;
+      configuration.ledStripSize = LED_STRIP_SIZE;
     #endif
   }
 
@@ -51,6 +52,10 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.ledDelayMs)) {
     Log.verboseln("NaN ledDelayMs");
     configuration.ledDelayMs = 10;
+  }
+  if (isnan(configuration.ledStripSize)) {
+    Log.verboseln("NaN ledStripSize");
+    configuration.ledStripSize = LED_STRIP_SIZE;
   }
 #endif
 
