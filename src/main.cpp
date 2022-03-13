@@ -15,6 +15,7 @@
 #include "modes/PaletteMode.h"
 #include "modes/ColorSplitMode.h"
 #include "modes/WhiteLightMode.h"
+#include "modes/SlavaUkrainiRingMode.h"
 
 CRGB* leds;
 
@@ -57,6 +58,7 @@ void setup() {
   wifiManager = new CWifiManager();
 
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  modes.push_back(new CSlavaUkrainiRingMode(configuration.ledStripSize, "Slava Ukraini"));
   modes.push_back(new CColorSplitMode(configuration.ledStripSize, "Dual Ring"));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
@@ -92,7 +94,7 @@ void loop() {
     configuration.ledMode = 0;
   }
 
-  memset(leds, 0, sizeof(CRGB)*configuration.ledStripSize);
+  //memset(leds, 0, sizeof(CRGB)*configuration.ledStripSize);
   modes[configuration.ledMode]->draw(leds);
   FastLED.show(255 * configuration.ledBrightness);
 
@@ -107,4 +109,6 @@ void loop() {
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }
+
+  delay(50);
 }

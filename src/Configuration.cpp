@@ -33,7 +33,7 @@ void EEPROM_saveConfig() {
 
 void EEPROM_loadConfig() {
 
-  memset(&configuration, 0, sizeof(configuration_t));
+  configuration = {};
   EEPROM.get(EEPROM_CONFIGURATION_START, configuration);
 
   Log.noticeln("Configuration loaded: %s", configuration._loaded);
@@ -100,7 +100,7 @@ void EEPROM_loadConfig() {
 
 void EEPROM_wipe() {
   Log.warningln("Wiping configuration!");
-  for (int i = 0 ; i < EEPROM.length() ; i++) {
+  for (uint16_t i = 0; i < EEPROM.length() ; i++) {
     EEPROM.write(i, 0);
   }
 }

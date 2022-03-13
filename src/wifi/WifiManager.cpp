@@ -145,9 +145,9 @@ void CWifiManager::listen() {
   AsyncElegantOTA.begin(server);
 
   configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
-  struct tm timeinfo;
   
   /*
+  struct tm timeinfo;
   //time()
   if(getLocalTime(&timeinfo)){
     Log.infoln("%i:%i", timeinfo.tm_hour,timeinfo.tm_min);

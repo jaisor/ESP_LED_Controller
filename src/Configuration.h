@@ -55,8 +55,8 @@ struct configuration_t {
         char wifiSsid[32];
         char wifiPassword[63];
         char ntpServer[128];
-        long gmtOffset_sec = 0;
-        int daylightOffset_sec = 3600;
+        long gmtOffset_sec;
+        int daylightOffset_sec;
     #endif
 
     #ifdef LED
@@ -70,6 +70,7 @@ struct configuration_t {
     char name[128];
 
     char _loaded[7]; // used to check if EEPROM was correctly set
+    
 };
 
 extern configuration_t configuration;
