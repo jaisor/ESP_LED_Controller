@@ -89,12 +89,10 @@ void loop() {
     return;
   }
 
-  //Log.infoln("mode: %i, bright: %i, delay: %i, cycle: %i", configuration.ledMode, 10000.0 * configuration.ledBrightness, configuration.ledDelayMs, configuration.ledCycleModeMs);
   if (configuration.ledMode > modes.size()-1) {
     configuration.ledMode = 0;
   }
 
-  //memset(leds, 0, sizeof(CRGB)*configuration.ledStripSize);
   modes[configuration.ledMode]->draw(leds);
   FastLED.show(255 * configuration.ledBrightness);
 
