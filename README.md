@@ -4,10 +4,10 @@
 
 ## Features
 * Two LED rings - outer (141 LEDs) and inner (126 LEDs) wired up in series for a total of 267 LEDs
-* Controlled by ESP32 (most stable). Code is compatible with ESP8266, but I was encountering stability issues with wifi and longer LED strips.
-* WiFi capable 
+* Controlled by ESP32 (most stable). Code is compatible with ESP8266, but I was suffering stability issues with wifi and longer LED strips.
+* WiFi connected 
     * creates a default AP, listening to http://192.168.4.1
-    * allows joining an existing 2.4GHz network
+    * capable of joining existing 2.4GHz networks
     * serves a webpage for managing LED - strip size, mode, brightness   
 
 ## Components
@@ -23,6 +23,22 @@ I used the ones below but likely many others will work. Make sure the white is t
 * ERYONE Matte PLA black - https://www.amazon.com/gp/product/B08HX1XF55
 
 ## Assembly and wiring
+
+Print 4 of each:
+* [Dark Ring](stl/DarkRing.stl)
+* [Light Ring](stl/LightRing.stl)
+* [Bridge Hanger](stl/Hanger.stl)
+
+Assemble as described here. Rotate the light ring pieces by 45 degrees so they end in the middle of a dark ring. This improves stability.
+![Assembly diagram](img/AssemblyAnnotated.png)
+
+Cut the two LED strips to 141 and 126 LEDs. Keep as many of the existing wires and connectors as possible.
+
+Wire the strips data in series - outer first then inner. The beginning of the outer ring data pin goes to the connector data pin.
+
+Join the power wires in parallel: 5V/VCC together to the 5V connector pin; GND(-) together to GND on connector pin.
+
+![Schematic](img/Schematic.png)
 
 By default in `Configuration.h` the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed
 
