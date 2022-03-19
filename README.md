@@ -1,44 +1,41 @@
-# ESP LED Controller
+# RingLight ESP LED Controller
+
+![Glamor shot](img/Collage.jpg)
 
 ## Features
-* Controls individually addressable LED strips supported by FastLED (like WS28121, WS2812, WS2812B)
-* Compatible with both ESP32 and ESP8266 platforms
+* Two LED rings - outer (141 LEDs) and inner (126 LEDs) wired up in series for a total of 267 LEDs
+* Controlled by ESP32 (most stable). Code is compatible with ESP8266, but I was encountering stability issues with wifi and longer LED strips.
 * WiFi capable 
     * creates a default AP, listening to http://192.168.4.1
     * allows joining an existing 2.4GHz network
-    * serves a webpage for managing LED - strip size, mode, brightness
+    * serves a webpage for managing LED - strip size, mode, brightness   
 
-## Configuration.h
-
-This file configured various default settings, like:
-* ESP pin used to drive the LED data (defaults are referenced below)
-* WiFi AP name/password
-* LED strip type, size, default brightness
-
-## Basic components, enclosure and wiring
-
-The most basic setup would use 5v LEDs and power both the ESP board and LED strip directly from a 5v DC of the appropriate Amperage / Wattage
-
-Example components:
+## Components
 * ESP32 - https://www.amazon.com/gp/product/B086MGH7JV
 * JST SM 3PIN LED Connector - https://www.amazon.com/gp/product/B075K4HLTQ
 * DC power connector - https://www.amazon.com/gp/product/B01N8VV78D
-* LED strip - https://www.amazon.com/gp/product/B08B59CBK9
+* WS2812B LED strip high density strips 144 LEDs per strip x 2 - https://www.amazon.com/gp/product/B088FKZWDQ
 * DC 5v adapter - https://www.amazon.com/gp/product/B078RXZM4C
 
-3A DC adapter can power a strip of 144 LEDs well enough, even longer depending on color and brightness.
+## 3D filament 
+I used the ones below but likely many others will work. Make sure the white is translusent enough, print a 3 layer sheet and put it infront of some LEDs.
+* ESUN PLA+ warm white - https://www.amazon.com/gp/product/B01EKEMIIS
+* ERYONE Matte PLA black - https://www.amazon.com/gp/product/B08HX1XF55
 
-### ESP32 
+## Assembly and wiring
+
+By default in `Configuration.h` the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed
 
 __LED_PIN_STRIP = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
 
 ![ESP32 pins](img/ESP32_pins.png)
 
-### ESP8266 
+## Configuration.h
 
-__LED_PIN_STRIP = 2__ - this is D4 (physical pin 17) above 5V and GND 
-
-![ESP8266 pins](img/ESP8266_pins.jpg)
+This file configures various default settings, like:
+* ESP pin used to drive the LED data (defaults are referenced below)
+* WiFi AP name/password
+* LED strip type, size, default brightness
 
 ### 3D Printable Enclosure
 
