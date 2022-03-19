@@ -1,7 +1,7 @@
 # ESP LED Controller
 
 ## Features
-* Controlls individually addessible LED strips supported by FastLED (like WS28121, WS2812, WS2812B)
+* Controls individually addressable LED strips supported by FastLED (like WS28121, WS2812, WS2812B)
 * Compatible with both ESP32 and ESP8266 platforms
 * WiFi capable 
     * creates a default AP, listening to http://192.168.4.1
