@@ -40,6 +40,8 @@ Join the power wires in parallel: 5V/VCC together to the 5V connector pin; GND(-
 Providing power to both start and ends of the strips reduces voltage sag and ensures even light at all brightness levels.
 
 ![Schematic](img/Schematic.png)
+![Wiring Closeup](img/WiringCloseup.jpg)
+![Wiring Complete](img/WiringComplete.jpg)
 
 By default in `Configuration.h` the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed.
 
@@ -50,8 +52,8 @@ __LED_PIN_STRIP = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
 Solder the power and data cables between the LED connector, ESP32 and DC connector as shown below, using the basic 3D printable enclosure.
 The board is mounted above the DC connector with 3mm screws
 
-![ESP32 box](img/ESP_box.jpg)
 ![ESP32 box assembled](img/ESP_box_assembled.jpg)
+![ESP32 box](img/ESP_box.jpg)
 
 Enclosure STL files. Print in PLA, PETG or any other hard filament.
 * [ESP32 Case STL](stl/ESP32Case.stl)
