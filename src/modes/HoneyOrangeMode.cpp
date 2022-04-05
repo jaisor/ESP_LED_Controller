@@ -29,6 +29,6 @@ extern const TProgmemRGBPalette16 HoneyOrange_p FL_PROGMEM =
 };
 
 CHoneyOrangeMode::CHoneyOrangeMode(const uint16_t numLeds, const String name)
-: CPaletteMode(numLeds, name, HoneyOrange_p, 1) {
+: CRingPaletteMode(numLeds, OUTTER_RING_SIZE, name, HoneyOrange_p, 1) {
     
 }

@@ -1,11 +1,11 @@
 #include "PaletteMode.h"
 
 CPaletteMode::CPaletteMode(const uint16_t numLeds, const String name, const TProgmemRGBPalette16& palette, const float increment)
-: CBaseMode(numLeds, name), increment(increment), palette(palette), blendType(LINEARBLEND), delay(15) {
+: CPaletteMode(numLeds, name, palette, increment, LINEARBLEND, 15) {
 }
 
 CPaletteMode::CPaletteMode(const uint16_t numLeds, const String name, const TProgmemRGBPalette16& palette, const float increment, const TBlendType blendType)
-: CBaseMode(numLeds, name), increment(increment), palette(palette), blendType(blendType), delay(15) {
+: CPaletteMode(numLeds, name, palette, increment, blendType, 15) {
 }
 
 CPaletteMode::CPaletteMode(const uint16_t numLeds, const String name, const TProgmemRGBPalette16& palette, const float increment, const TBlendType blendType, const unsigned long delay)
