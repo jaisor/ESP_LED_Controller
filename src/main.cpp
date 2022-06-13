@@ -54,6 +54,29 @@ const TProgmemRGBPalette16 SlavaUkraini_p FL_PROGMEM =
     S1C2,
 };
 
+const TProgmemRGBPalette16 Pride_p FL_PROGMEM =
+{
+    0xFF0018,   // Vivid Red
+    0xFF0018,   // Vivid Red
+    0xFFA52C,   // Deep Saffron
+    0xFFA52C,   // Deep Saffron
+
+    0xFFFF41,   // Maximum Yellow
+    0xFFFF41,   // Maximum Yellow
+    0x008018,   // Ao
+    0x008018,   // Ao
+
+    0x0000F9,   // Blue
+    0x0000F9,   // Blue
+    0x86007D,   // Philippine Violet
+    0x86007D,   // Philippine Violet
+
+    0x86007D,   // Philippine Violet
+    0x86007D,   // Philippine Violet
+    0xFF0018,   // Vivid Red
+    0xFF0018,   // Vivid Red
+};
+
 void setup() {
   delay( 1000 ); // power-up safety delay
 
@@ -100,6 +123,7 @@ void setup() {
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Ocean Colors", OceanColors_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Lava Colors", LavaColors_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   modes.push_back(new CHoneyOrangeMode(configuration.ledStripSize, "Honey Amber"));
+  modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Pride", Pride_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   
   wifiManager->setModes(&modes);
 
