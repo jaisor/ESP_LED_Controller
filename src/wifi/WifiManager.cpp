@@ -56,7 +56,7 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Poin
 
 const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
-      <label for='ssid'>Device name:</label><br>\
+      <label for='deviceName'>Device name:</label><br>\
       <input type='text' id='deviceName' name='deviceName' value='%s'><br>\
       <br>\
       <label for='frame_delay'>LED strip length:</label><br>\

@@ -27,7 +27,6 @@ private:
   char SSID[32];
   bool apMode;
   bool rebootNeeded;
-  
 
   AsyncWebServer* server;
 
