@@ -10,7 +10,7 @@
 #include "wifi/WifiManager.h"
 #include "Configuration.h"
 
-#define MAX_CONNECT_TIMEOUT_MS 15000 // 10 seconds to connect before creating its own AP
+#define MAX_CONNECT_TIMEOUT_MS 15000 // 1000 x seconds to connect before creating its own AP
 #define BOARD_LED_PIN 2
 
 const int RSSI_MAX =-50;// define maximum straighten of signal in dBm
@@ -80,7 +80,7 @@ const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     </form>";
 
 CWifiManager::CWifiManager(): 
-apMode(false), rebootNeeded(false) {    
+rebootNeeded(false), wifiRetries(0) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
@@ -98,7 +98,7 @@ void CWifiManager::connect() {
     // Join AP from Config
     Log.infoln("Connecting to WiFi: '%s'", SSID);
     WiFi.begin(SSID, configuration.wifiPassword);
-    apMode = false;
+    wifiRetries = 0;
     
   } else {
 
@@ -117,7 +117,7 @@ void CWifiManager::connect() {
     Log.infoln("Creating WiFi: '%s' / '%s'", softAP_SSID, WIFI_FALLBACK_PASS);
     
     if (WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS)) {
-      apMode = true;
+      wifiRetries = 0;
       Log.infoln("Wifi AP '%s' created, listening on '%s'", softAP_SSID, WiFi.softAPIP().toString().c_str());
     } else {
       Log.errorln("Wifi AP faliled");
@@ -168,7 +168,7 @@ void CWifiManager::loop() {
     return;
   }
 
-  if (WiFi.status() == WL_CONNECTED || apMode ) {
+  if (WiFi.status() == WL_CONNECTED || isApMode() ) {
     // WiFi is connected
 
     if (status != WF_LISTENING) {  
@@ -188,9 +188,11 @@ void CWifiManager::loop() {
       } break;
       case WF_CONNECTING: {
         if (millis() - tMillis > MAX_CONNECT_TIMEOUT_MS) {
-          Log.warning("Connecting failed (wifi status %i) after %l ms, create an AP instead", (millis() - tMillis), WiFi.status());
           tMillis = millis();
-          strcpy(SSID, "");
+          if (wifiRetries++ > 3) {
+            Log.warningln("Connecting failed (wifi status %i) after %l ms, create an AP instead", (millis() - tMillis), WiFi.status());
+            strcpy(SSID, "");
+          }
           connect();
         }
       } break;
@@ -212,7 +214,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   response->printf(htmlTop.c_str(), configuration.name, configuration.name);
 
-  if (apMode) {
+  if (isApMode()) {
     response->printf(htmlWifiApConnectForm.c_str());
   } else {
     response->printf("<p>Connected to '%s'</p>", SSID);
@@ -299,4 +301,8 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   EEPROM_saveConfig();
   
   request->redirect("/");
+}
+
+bool CWifiManager::isApMode() { 
+  return WiFi.getMode() == WIFI_AP; 
 }
