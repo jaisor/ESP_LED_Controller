@@ -38,6 +38,7 @@
         "utility": "cpp",
         "typeinfo": "cpp",
         "string": "cpp",
-        "system_error": "cpp"
+        "system_error": "cpp",
+        "optional": "cpp"
     }
 }

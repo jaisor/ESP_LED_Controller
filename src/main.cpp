@@ -150,7 +150,7 @@ void loop() {
   }
 
   modes[configuration.ledMode]->draw(leds);
-  FastLED.show(255 * configuration.ledBrightness);
+  FastLED.show(255 * CONFIG_getLedBrightness());
 
   if (configuration.ledCycleModeMs > 0) {
     // Change modes every so often 

@@ -71,6 +71,9 @@ struct configuration_t {
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
         uint16_t ledStripSize;
+        float psLedBrightness;
+        int8_t psStartHour;
+        int8_t psEndHour;
     #endif
 
     char name[128];
@@ -87,5 +90,9 @@ void EEPROM_clearFactoryReset();
 void EEPROM_saveConfig();
 void EEPROM_loadConfig();
 void EEPROM_wipe();
+
+#ifdef LED
+    float CONFIG_getLedBrightness();
+#endif
 
 #endif
