@@ -15,8 +15,9 @@
 #include "modes/PaletteMode.h"
 #include "modes/RingPaletteMode.h"
 #include "modes/ColorSplitMode.h"
-#include "modes/WhiteLightMode.h"
 #include "modes/SlavaUkrainiRingMode.h"
+
+#include "modes/WhiteLightMode.h"
 
 CRGB* leds;
 
@@ -112,8 +113,8 @@ void setup() {
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
   modes.push_back(new CSlavaUkrainiRingMode(configuration.ledStripSize, "Slava Ukraini"));
 
+  #ifdef RING_LIGHT
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Slava Ukraini 2", SlavaUkraini_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
-
   modes.push_back(new CColorSplitMode(configuration.ledStripSize, "Dual Ring"));
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Party Colors", PartyColors_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Heat Colors", HeatColors_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
@@ -124,6 +125,17 @@ void setup() {
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Lava Colors", LavaColors_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   modes.push_back(new CHoneyOrangeMode(configuration.ledStripSize, "Honey Amber"));
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Pride", Pride_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
+  #endif
+
+  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Cloud Colors", CloudColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CHoneyOrangeMode(configuration.ledStripSize, "Honey Amber"));
   
   wifiManager->setModes(&modes);
 

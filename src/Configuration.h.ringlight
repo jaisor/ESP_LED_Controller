@@ -8,7 +8,7 @@
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
 //#define KEYPAD      // Buttons
-//#define RING_LIGHT
+#define RING_LIGHT
 
 #define EEPROM_FACTORY_RESET 0           // Byte to be used for factory reset device fails to start or is rebooted within 1 sec 3 consequitive times
 #define EEPROM_CONFIGURATION_START 1     // First EEPROM byte to be used for storing the configuration

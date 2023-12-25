@@ -357,7 +357,7 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   float psLedBrightness = atof(request->arg("psLedBrightness").c_str());
   if (psLedBrightness>=0.0 && psLedBrightness<=1.0) {
     configuration.psLedBrightness = psLedBrightness;
-    Log.noticeln("psLedBrightness: %0.2f", configuration.psLedBrightness);
+    Log.noticeln("psLedBrightness: %D", configuration.psLedBrightness);
   }
 
   int psStartHour = atoi(request->arg("psStartHour").c_str());

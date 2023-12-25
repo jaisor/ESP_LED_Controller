@@ -117,12 +117,12 @@ void EEPROM_wipe() {
 }
 
 #ifdef LED
-static float currentLedBrightness = 0;
-static unsigned long tsLedBrightnessUpdate = 0;
+float currentLedBrightness = 0;
+unsigned long tsLedBrightnessUpdate = 0;
 
 bool isInsideInterval(int i, int8_t s, int8_t e) {
   if (s <= e) {
-    return i>=s && i>e;
+    return i>=s && i<e;
   } else {
     return ((i>=s && i<24) || (i>=0 && i<e));
   }
