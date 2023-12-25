@@ -361,12 +361,16 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   }
 
   int psStartHour = atoi(request->arg("psStartHour").c_str());
-  configuration.psStartHour = psStartHour;
-  Log.noticeln("psStartHour: %i", psStartHour);
+  if (psStartHour >= 0 && psStartHour < 23) {  
+    configuration.psStartHour = psStartHour;
+    Log.noticeln("psStartHour: %i", psStartHour);
+  }
 
   int psEndHour = atoi(request->arg("psEndHour").c_str());
-  configuration.psEndHour = psEndHour;
-  Log.noticeln("psEndHour: %i", psEndHour);
+  if (psEndHour >= 0 && psEndHour < 23) {  
+    configuration.psEndHour = psEndHour;
+    Log.noticeln("psEndHour: %i", psEndHour);
+  }
 
   //
 

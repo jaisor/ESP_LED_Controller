@@ -120,6 +120,14 @@ void EEPROM_wipe() {
 static float currentLedBrightness = 0;
 static unsigned long tsLedBrightnessUpdate = 0;
 
+bool isInsideInterval(int i, int8_t s, int8_t e) {
+  if (s <= e) {
+    return i>=s && i>e;
+  } else {
+    return ((i>=s && i<24) || (i>=0 && i<e));
+  }
+}
+
 float CONFIG_getLedBrightness(bool force) {
   currentLedBrightness = configuration.ledBrightness;
   #ifdef WIFI
@@ -128,11 +136,11 @@ float CONFIG_getLedBrightness(bool force) {
     tsLedBrightnessUpdate = millis();
     struct tm timeinfo;
     bool timeUpdated = getLocalTime(&timeinfo);
-    if (timeUpdated && timeinfo.tm_hour >= configuration.psStartHour && timeinfo.tm_hour <= configuration.psEndHour) {
+    if (timeUpdated && isInsideInterval(timeinfo.tm_hour, configuration.psStartHour, configuration.psEndHour)) {
         currentLedBrightness = currentLedBrightness * configuration.psLedBrightness;
-    }
-    if (currentLedBrightness != configuration.ledBrightness) {
-      Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
+        if (currentLedBrightness != configuration.ledBrightness) {
+          Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
+        }
     }
   }
   #endif
