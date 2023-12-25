@@ -256,7 +256,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     strftime(dTime, 100, "%F %T %z", &timeinfo);
   }
 
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME), CONFIG_getLedBrightness(true));
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME), CONFIG_getLedBrightness());
   request->send(response);
 }
 
@@ -375,6 +375,7 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
   //
 
   EEPROM_saveConfig();
+  CONFIG_getLedBrightness(true);
   
   request->redirect("/");
 }
