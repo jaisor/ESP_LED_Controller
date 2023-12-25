@@ -8,6 +8,7 @@
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
 //#define KEYPAD      // Buttons
+//#define RING_LIGHT
 
 #define EEPROM_FACTORY_RESET 0           // Byte to be used for factory reset device fails to start or is rebooted within 1 sec 3 consequitive times
 #define EEPROM_CONFIGURATION_START 1     // First EEPROM byte to be used for storing the configuration
@@ -43,7 +44,14 @@
     #elif ESP8266
         #define LED_PIN 2
     #endif
-    #define LED_STRIP_SIZE 240  // 267 for RingLight, 240 for PingPong table light
+    // 267 for RingLight, 480 for PingPong table light
+    #ifdef RING_LIGHT 
+        #define LED_STRIP_SIZE 267
+        #define OUTTER_RING_SIZE 141
+    #else
+        #define LED_STRIP_SIZE 480  
+        #define OUTTER_RING_SIZE 240
+    #endif
     #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
     #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
@@ -65,6 +73,9 @@ struct configuration_t {
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
         uint16_t ledStripSize;
+        float psLedBrightness;
+        int8_t psStartHour;
+        int8_t psEndHour;
     #endif
 
     char name[128];
@@ -81,5 +92,9 @@ void EEPROM_clearFactoryReset();
 void EEPROM_saveConfig();
 void EEPROM_loadConfig();
 void EEPROM_wipe();
+
+#ifdef LED
+    float CONFIG_getLedBrightness(bool force = false);
+#endif
 
 #endif

@@ -44,15 +44,19 @@ void EEPROM_loadConfig() {
     strcpy(configuration._loaded, "jaisor");
     strcpy(configuration.name, DEVICE_NAME);
     #ifdef LED
-      configuration.ledBrightness = LED_BRIGHTNESS;
-      strcpy(configuration.ntpServer, NTP_SERVER);
-      configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
-      configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
       configuration.ledMode = 0;
       configuration.ledCycleModeMs = LED_CHANGE_MODE_SEC * 1000;
       configuration.ledDelayMs = 10;
       configuration.ledBrightness = LED_BRIGHTNESS;
       configuration.ledStripSize = LED_STRIP_SIZE;
+      configuration.psLedBrightness = 1.0f;
+      configuration.psStartHour = 0;
+      configuration.psEndHour = 0;
+    #endif
+     #ifdef WIFI
+      strcpy(configuration.ntpServer, NTP_SERVER);
+      configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
+      configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
     #endif
   }
 
@@ -77,6 +81,18 @@ void EEPROM_loadConfig() {
     Log.verboseln("NaN ledStripSize");
     configuration.ledStripSize = LED_STRIP_SIZE;
   }
+  if (isnan(configuration.psLedBrightness)) {
+    Log.verboseln("NaN power-save brightness");
+    configuration.psLedBrightness = 1.0;
+  }
+  if (isnan(configuration.psStartHour)) {
+    Log.verboseln("NaN power-save start hour");
+    configuration.psStartHour = 0;
+  }
+  if (isnan(configuration.psEndHour)) {
+    Log.verboseln("NaN power-save end hour");
+    configuration.psEndHour = 0;
+  }
 #endif
 
 #ifdef WIFI
@@ -91,11 +107,6 @@ void EEPROM_loadConfig() {
 #endif
 
   Log.noticeln("Device name: %s", configuration.name);
-
-  // FIXME: Always default NTP values
-  strcpy(configuration.ntpServer, NTP_SERVER);
-  configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
-  configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
 }
 
 void EEPROM_wipe() {
@@ -104,3 +115,35 @@ void EEPROM_wipe() {
     EEPROM.write(i, 0);
   }
 }
+
+#ifdef LED
+float currentLedBrightness = 0;
+unsigned long tsLedBrightnessUpdate = 0;
+
+bool isInsideInterval(int i, int8_t s, int8_t e) {
+  if (s <= e) {
+    return i>=s && i<e;
+  } else {
+    return ((i>=s && i<24) || (i>=0 && i<e));
+  }
+}
+
+float CONFIG_getLedBrightness(bool force) {
+  currentLedBrightness = configuration.ledBrightness;
+  #ifdef WIFI
+  // Check on power save mode about once per minute
+  if (configuration.psLedBrightness < 1.0f && (configuration.psStartHour || configuration.psEndHour) && (force || millis() - tsLedBrightnessUpdate > 60000)) {
+    tsLedBrightnessUpdate = millis();
+    struct tm timeinfo;
+    bool timeUpdated = getLocalTime(&timeinfo);
+    if (timeUpdated && isInsideInterval(timeinfo.tm_hour, configuration.psStartHour, configuration.psEndHour)) {
+        currentLedBrightness = currentLedBrightness * configuration.psLedBrightness;
+        if (currentLedBrightness != configuration.ledBrightness) {
+          Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
+        }
+    }
+  }
+  #endif
+  return currentLedBrightness;
+}
+#endif

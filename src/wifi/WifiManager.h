@@ -21,13 +21,12 @@ typedef enum {
 class CWifiManager: public CBaseManager {
 
 private:
+  uint8_t wifiRetries;
   unsigned long tMillis;
   wifi_status status;
   char softAP_SSID[32];
   char SSID[32];
-  bool apMode;
   bool rebootNeeded;
-  
 
   AsyncWebServer* server;
 
@@ -37,6 +36,7 @@ private:
   void handleRoot(AsyncWebServerRequest *request);
   void handleConnect(AsyncWebServerRequest *request);
   void handleLedMode(AsyncWebServerRequest *request);
+  void handleFactoryReset(AsyncWebServerRequest *request);
 
   std::vector<CBaseMode*> *modes;
         
@@ -46,6 +46,8 @@ public:
 
   void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
   bool isRebootNeeded() { return rebootNeeded; }
+
+  bool isApMode();
 };
 
 #endif

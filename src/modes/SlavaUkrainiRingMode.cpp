@@ -1,7 +1,5 @@
 #include "SlavaUkrainiRingMode.h"
 
-#define OUTTER_RING_SIZE 141
-
 #define S1C1 0xFFD700
 #define S1C2 0x665700
 #define S2C1 0x0057B8

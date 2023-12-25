@@ -4,13 +4,14 @@
 
 #include <Arduino.h>
 #include <WiFiClient.h>
+#include <Time.h>
 #include <ezTime.h>
 #include <AsyncElegantOTA.h>
 
 #include "wifi/WifiManager.h"
 #include "Configuration.h"
 
-#define MAX_CONNECT_TIMEOUT_MS 15000 // 10 seconds to connect before creating its own AP
+#define MAX_CONNECT_TIMEOUT_MS 15000 // 1000 x seconds to connect before creating its own AP
 #define BOARD_LED_PIN 2
 
 const int RSSI_MAX =-50;// define maximum straighten of signal in dBm
@@ -41,7 +42,10 @@ const String htmlTop FL_PROGMEM = "<html>\
     <h1>%s LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
-  <p>Uptime: %02d:%02d:%02d | Device: %s</p>\
+  <p>Uptime: %02d:%02d:%02d | Device time: %s | Device: %s | Current brightness: %0.2f</p>\
+  <form method='POST' action='/factory_reset' enctype='application/x-www-form-urlencoded'>\
+    <input type='submit' style='font-size: 6pt; color: red; background-color: black;' value='Factory Reset...'>\
+  </form>\
   </body>\
 </html>";
 
@@ -54,9 +58,9 @@ const String htmlWifiApConnectForm FL_PROGMEM = "<h2>Connect to WiFi Access Poin
       <input type='submit' value='Connect...'>\
     </form>";
 
-const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
+const String htmlDeviceConfigs FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
     <form method='POST' action='/led_mode' enctype='application/x-www-form-urlencoded'>\
-      <label for='ssid'>Device name:</label><br>\
+      <label for='deviceName'>Device name:</label><br>\
       <input type='text' id='deviceName' name='deviceName' value='%s'><br>\
       <br>\
       <label for='frame_delay'>LED strip length:</label><br>\
@@ -76,11 +80,25 @@ const String htmlLEDModes FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
       <label for='cycle_delay'>Auto cycle modes every:</label><br>\
       <input type='text' id='cycle_delay' name='cycle_delay' value='%i'> seconds (0-stay on current mode)<br>\
       <br>\
+      <label for='psLedBrightness'>Power-save brightness factor:</label><br>\
+      <input type='text' id='psLedBrightness' name='psLedBrightness' value='%.2f'> range 0.0-1.0, multiplied to the default brightness<br>\
+      <label for='psStartHour'>Power-save start hour:</label><br>\
+      <input type='text' id='psStartHour' name='psStartHour' value='%i'> (0-24)<br>\
+      <label for='psEndHour'>Power-save end hour:</label><br>\
+      <input type='text' id='psEndHour' name='psEndHour' value='%i'> (0-24)<br>\
+      <br>\
+      <label for='ntpServer'>NTP Server:</label><br>\
+      <input type='text' id='ntpServer' name='ntpServer' value='%s'><br>\
+      <label for='gmtOffset_sec'>GMT Offset:</label><br>\
+      <input type='text' id='gmtOffset_sec' name='gmtOffset_sec' value='%li'> sec.<br>\
+      <label for='daylightOffset_sec'>Daylight Offset:</label><br>\
+      <input type='text' id='daylightOffset_sec' name='daylightOffset_sec' value='%i'> sec.<br>\
+      <br>\
       <input type='submit' value='Set...'>\
     </form>";
 
 CWifiManager::CWifiManager(): 
-apMode(false), rebootNeeded(false) {    
+rebootNeeded(false), wifiRetries(0) {    
   pinMode(BOARD_LED_PIN,OUTPUT);
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
@@ -98,7 +116,7 @@ void CWifiManager::connect() {
     // Join AP from Config
     Log.infoln("Connecting to WiFi: '%s'", SSID);
     WiFi.begin(SSID, configuration.wifiPassword);
-    apMode = false;
+    wifiRetries = 0;
     
   } else {
 
@@ -117,7 +135,7 @@ void CWifiManager::connect() {
     Log.infoln("Creating WiFi: '%s' / '%s'", softAP_SSID, WIFI_FALLBACK_PASS);
     
     if (WiFi.softAP(softAP_SSID, WIFI_FALLBACK_PASS)) {
-      apMode = true;
+      wifiRetries = 0;
       Log.infoln("Wifi AP '%s' created, listening on '%s'", softAP_SSID, WiFi.softAPIP().toString().c_str());
     } else {
       Log.errorln("Wifi AP faliled");
@@ -135,25 +153,22 @@ void CWifiManager::listen() {
   server->on("/", std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
   server->on("/connect", HTTP_POST, std::bind(&CWifiManager::handleConnect, this, std::placeholders::_1));
   server->on("/led_mode", HTTP_POST, std::bind(&CWifiManager::handleLedMode, this, std::placeholders::_1));
+  server->on("/factory_reset", HTTP_POST, std::bind(&CWifiManager::handleFactoryReset, this, std::placeholders::_1));
   server->begin();
   Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
-
-  // NTP
-  Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
 
   // OTA
   AsyncElegantOTA.begin(server);
 
-  configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
-  
-  /*
-  struct tm timeinfo;
-  //time()
-  if(getLocalTime(&timeinfo)){
-    Log.infoln("%i:%i", timeinfo.tm_hour,timeinfo.tm_min);
+  // NTP
+  if (!isApMode()) {
+    Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
+    configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
+    struct tm timeinfo;
+    if(getLocalTime(&timeinfo)){
+      Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
+    }
   }
-  */
-  
 }
 
 void CWifiManager::loop() {
@@ -168,7 +183,7 @@ void CWifiManager::loop() {
     return;
   }
 
-  if (WiFi.status() == WL_CONNECTED || apMode ) {
+  if (WiFi.status() == WL_CONNECTED || isApMode() ) {
     // WiFi is connected
 
     if (status != WF_LISTENING) {  
@@ -188,9 +203,11 @@ void CWifiManager::loop() {
       } break;
       case WF_CONNECTING: {
         if (millis() - tMillis > MAX_CONNECT_TIMEOUT_MS) {
-          Log.warning("Connecting failed (wifi status %i) after %l ms, create an AP instead", (millis() - tMillis), WiFi.status());
           tMillis = millis();
-          strcpy(SSID, "");
+          if (wifiRetries++ > 3) {
+            Log.warningln("Connecting failed (wifi status %i) after %l ms, create an AP instead", (millis() - tMillis), WiFi.status());
+            strcpy(SSID, "");
+          }
           connect();
         }
       } break;
@@ -212,7 +229,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   response->printf(htmlTop.c_str(), configuration.name, configuration.name);
 
-  if (apMode) {
+  if (isApMode()) {
     response->printf(htmlWifiApConnectForm.c_str());
   } else {
     response->printf("<p>Connected to '%s'</p>", SSID);
@@ -224,12 +241,22 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
       modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
     }
   }
-  
-  response->printf(htmlLEDModes.c_str(), configuration.name, configuration.ledStripSize, 
-    modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, 
-    configuration.ledCycleModeMs / 1000);
 
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
+  response->printf(htmlDeviceConfigs.c_str(), 
+    configuration.name, configuration.ledStripSize, 
+    modeOptions.c_str(), configuration.ledBrightness, configuration.ledDelayMs, 
+    configuration.ledCycleModeMs / 1000,
+    configuration.psLedBrightness, configuration.psStartHour, configuration.psEndHour,
+    configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec
+  );
+
+  char dTime[100] = "";
+  struct tm timeinfo;
+  if(!isApMode() && getLocalTime(&timeinfo)) {
+    strftime(dTime, 100, "%F %T %z", &timeinfo);
+  }
+
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME), CONFIG_getLedBrightness(true));
   request->send(response);
 }
 
@@ -244,10 +271,16 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
   int min = sec / 60;
   int hr = min / 60;
 
+  char dTime[100] = "";
+  struct tm timeinfo;
+  if(!isApMode() && getLocalTime(&timeinfo)) {
+    strftime(dTime, 100, "%F %T %z", &timeinfo);
+  }
+
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   response->printf(htmlTop.c_str(), configuration.name, configuration.name);
   response->printf("<p>Connecting to '%s' ... see you on the other side!</p>", ssid.c_str());
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, String(DEVICE_NAME));
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME));
   request->send(response);
 
   ssid.toCharArray(configuration.wifiSsid, sizeof(configuration.wifiSsid));
@@ -259,6 +292,9 @@ void CWifiManager::handleConnect(AsyncWebServerRequest *request) {
 
   strcpy(SSID, configuration.wifiSsid);
   connect();
+
+  rebootNeeded = true;
+  request->redirect("/");
 }
 
 void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
@@ -296,7 +332,66 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
     rebootNeeded = true;
   }
 
+  // NTP
+
+  String ntpServer = request->arg("ntpServer");
+  ntpServer.toCharArray(configuration.ntpServer, sizeof(configuration.ntpServer));
+  Log.noticeln("ntpServer: %s", ntpServer);
+
+  long gmtOffset_sec = atol(request->arg("gmtOffset_sec").c_str());
+  configuration.gmtOffset_sec = gmtOffset_sec;
+  Log.noticeln("gmtOffset_sec: %l", gmtOffset_sec);
+
+  int daylightOffset_sec = atoi(request->arg("daylightOffset_sec").c_str());
+  configuration.daylightOffset_sec = daylightOffset_sec;
+  Log.noticeln("daylightOffset_sec: %i", daylightOffset_sec);
+
+  configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
+  struct tm timeinfo;
+  if(getLocalTime(&timeinfo)){
+    Log.infoln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
+  }
+
+  // Power-save
+
+  float psLedBrightness = atof(request->arg("psLedBrightness").c_str());
+  if (psLedBrightness>=0.0 && psLedBrightness<=1.0) {
+    configuration.psLedBrightness = psLedBrightness;
+    Log.noticeln("psLedBrightness: %D", configuration.psLedBrightness);
+  }
+
+  int psStartHour = atoi(request->arg("psStartHour").c_str());
+  if (psStartHour >= 0 && psStartHour < 23) {  
+    configuration.psStartHour = psStartHour;
+    Log.noticeln("psStartHour: %i", psStartHour);
+  }
+
+  int psEndHour = atoi(request->arg("psEndHour").c_str());
+  if (psEndHour >= 0 && psEndHour < 23) {  
+    configuration.psEndHour = psEndHour;
+    Log.noticeln("psEndHour: %i", psEndHour);
+  }
+
+  //
+
   EEPROM_saveConfig();
   
   request->redirect("/");
+}
+
+bool CWifiManager::isApMode() { 
+  return WiFi.getMode() == WIFI_AP; 
+}
+
+void CWifiManager::handleFactoryReset(AsyncWebServerRequest *request) {
+  Log.infoln("handleFactoryReset");
+  
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  response->setCode(200);
+  response->printf("OK");
+
+  EEPROM_wipe();
+  rebootNeeded = true;
+  
+  request->send(response);
 }
