@@ -92,7 +92,7 @@ void EEPROM_loadConfig();
 void EEPROM_wipe();
 
 #ifdef LED
-    float CONFIG_getLedBrightness();
+    float CONFIG_getLedBrightness(bool force = false);
 #endif
 
 #endif

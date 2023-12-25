@@ -42,7 +42,7 @@ const String htmlTop FL_PROGMEM = "<html>\
     <h1>%s LED Controller</h1>";
 
 const String htmlBottom FL_PROGMEM = "<br><br><hr>\
-  <p>Uptime: %02d:%02d:%02d | Device time: %s | Device: %s</p>\
+  <p>Uptime: %02d:%02d:%02d | Device time: %s | Device: %s | Current brightness: %0.2f</p>\
   <form method='POST' action='/factory_reset' enctype='application/x-www-form-urlencoded'>\
     <input type='submit' style='font-size: 6pt; color: red; background-color: black;' value='Factory Reset...'>\
   </form>\
@@ -80,8 +80,8 @@ const String htmlDeviceConfigs FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
       <label for='cycle_delay'>Auto cycle modes every:</label><br>\
       <input type='text' id='cycle_delay' name='cycle_delay' value='%i'> seconds (0-stay on current mode)<br>\
       <br>\
-      <label for='brightness'>Power-save brightness factor:</label><br>\
-      <input type='text' id='psBrightness' name='psBrightness' value='%.2f'> range 0.0-1.0, multiplied to the default brightness<br>\
+      <label for='psLedBrightness'>Power-save brightness factor:</label><br>\
+      <input type='text' id='psLedBrightness' name='psLedBrightness' value='%.2f'> range 0.0-1.0, multiplied to the default brightness<br>\
       <label for='psStartHour'>Power-save start hour:</label><br>\
       <input type='text' id='psStartHour' name='psStartHour' value='%i'> (0-24)<br>\
       <label for='psEndHour'>Power-save end hour:</label><br>\
@@ -256,7 +256,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     strftime(dTime, 100, "%F %T %z", &timeinfo);
   }
 
-  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME));
+  response->printf(htmlBottom.c_str(), hr, min % 60, sec % 60, dTime, String(DEVICE_NAME), CONFIG_getLedBrightness(true));
   request->send(response);
 }
 
@@ -331,6 +331,44 @@ void CWifiManager::handleLedMode(AsyncWebServerRequest *request) {
     tMillis = millis();
     rebootNeeded = true;
   }
+
+  // NTP
+
+  String ntpServer = request->arg("ntpServer");
+  ntpServer.toCharArray(configuration.ntpServer, sizeof(configuration.ntpServer));
+  Log.noticeln("ntpServer: %s", ntpServer);
+
+  long gmtOffset_sec = atol(request->arg("gmtOffset_sec").c_str());
+  configuration.gmtOffset_sec = gmtOffset_sec;
+  Log.noticeln("gmtOffset_sec: %l", gmtOffset_sec);
+
+  int daylightOffset_sec = atoi(request->arg("daylightOffset_sec").c_str());
+  configuration.daylightOffset_sec = daylightOffset_sec;
+  Log.noticeln("daylightOffset_sec: %i", daylightOffset_sec);
+
+  configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
+  struct tm timeinfo;
+  if(getLocalTime(&timeinfo)){
+    Log.infoln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
+  }
+
+  // Power-save
+
+  float psLedBrightness = atof(request->arg("psLedBrightness").c_str());
+  if (psLedBrightness>=0.0 && psLedBrightness<=1.0) {
+    configuration.psLedBrightness = psLedBrightness;
+    Log.noticeln("psLedBrightness: %0.2f", configuration.psLedBrightness);
+  }
+
+  int psStartHour = atoi(request->arg("psStartHour").c_str());
+  configuration.psStartHour = psStartHour;
+  Log.noticeln("psStartHour: %i", psStartHour);
+
+  int psEndHour = atoi(request->arg("psEndHour").c_str());
+  configuration.psEndHour = psEndHour;
+  Log.noticeln("psEndHour: %i", psEndHour);
+
+  //
 
   EEPROM_saveConfig();
   

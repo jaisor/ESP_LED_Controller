@@ -120,19 +120,19 @@ void EEPROM_wipe() {
 static float currentLedBrightness = 0;
 static unsigned long tsLedBrightnessUpdate = 0;
 
-float CONFIG_getLedBrightness() {
+float CONFIG_getLedBrightness(bool force) {
   currentLedBrightness = configuration.ledBrightness;
   #ifdef WIFI
   // Check on power save mode about once per minute
-  if (configuration.psLedBrightness < 1.0f && (configuration.psStartHour || configuration.psEndHour) && millis() - tsLedBrightnessUpdate > 60000) {
+  if (configuration.psLedBrightness < 1.0f && (configuration.psStartHour || configuration.psEndHour) && (force || millis() - tsLedBrightnessUpdate > 60000)) {
     tsLedBrightnessUpdate = millis();
     struct tm timeinfo;
     bool timeUpdated = getLocalTime(&timeinfo);
-    if (timeUpdated && (timeinfo.tm_hour >= configuration.psStartHour || timeinfo.tm_hour < configuration.psEndHour)) {
+    if (timeUpdated && timeinfo.tm_hour >= configuration.psStartHour && timeinfo.tm_hour <= configuration.psEndHour) {
         currentLedBrightness = currentLedBrightness * configuration.psLedBrightness;
     }
     if (currentLedBrightness != configuration.ledBrightness) {
-      Log.info("Current LED brightness is '%0.2f' compared to default '%0.2f'", currentLedBrightness, configuration.ledBrightness);
+      Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
     }
   }
   #endif
