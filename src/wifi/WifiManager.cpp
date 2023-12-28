@@ -83,9 +83,9 @@ const String htmlDeviceConfigs FL_PROGMEM = "<hr><h2>LED Mode Selector</h2>\
       <label for='psLedBrightness'>Power-save brightness factor:</label><br>\
       <input type='text' id='psLedBrightness' name='psLedBrightness' value='%.2f'> range 0.0-1.0, multiplied to the default brightness<br>\
       <label for='psStartHour'>Power-save start hour:</label><br>\
-      <input type='text' id='psStartHour' name='psStartHour' value='%i'> (0-24)<br>\
+      <input type='text' id='psStartHour' name='psStartHour' value='%i'> (0-23)<br>\
       <label for='psEndHour'>Power-save end hour:</label><br>\
-      <input type='text' id='psEndHour' name='psEndHour' value='%i'> (0-24)<br>\
+      <input type='text' id='psEndHour' name='psEndHour' value='%i'> (0-23)<br>\
       <br>\
       <label for='ntpServer'>NTP Server:</label><br>\
       <input type='text' id='ntpServer' name='ntpServer' value='%s'><br>\
