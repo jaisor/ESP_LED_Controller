@@ -39,6 +39,23 @@
         "typeinfo": "cpp",
         "string": "cpp",
         "system_error": "cpp",
-        "optional": "cpp"
+        "optional": "cpp",
+        "thread": "cpp",
+        "ratio": "cpp",
+        "chrono": "cpp",
+        "condition_variable": "cpp",
+        "cstddef": "cpp",
+        "cstring": "cpp",
+        "unordered_set": "cpp",
+        "algorithm": "cpp",
+        "iterator": "cpp",
+        "map": "cpp",
+        "memory": "cpp",
+        "memory_resource": "cpp",
+        "random": "cpp",
+        "string_view": "cpp",
+        "iomanip": "cpp",
+        "iostream": "cpp",
+        "mutex": "cpp"
     }
 }
