@@ -79,29 +79,38 @@ const TProgmemRGBPalette16 Pride_p FL_PROGMEM =
 };
 
 void setup() {
-  delay( 1000 ); // power-up safety delay
-
-  Serial.begin(115200);
-  while(!Serial && !Serial.available()){}
   randomSeed(analogRead(0));
+  
+  #ifdef ESP8266
+    pinMode(D0, WAKEUP_PULLUP);
+  #endif
+  pinMode(INTERNAL_LED_PIN, OUTPUT);
+  intLEDOn();
 
-  Log.begin(LOG_LEVEL_VERBOSE, &Serial);
-  Log.noticeln("******************************************");  
-
-#ifdef LED_PIN_BOARD
-  pinMode(LED_PIN_BOARD, OUTPUT);
-  digitalWrite(LED_PIN_BOARD, HIGH);
-#endif
+  #ifndef DISABLE_LOGGING
+  Serial.begin(SERIAL_MONITOR_BAUD); while (!Serial); delay(100);
+  Log.begin(LOG_LEVEL, &Serial);
+  Log.infoln(F("\n\nInitializing..."));
+    #ifdef WEB_LOGGING
+    Log.addHandler(&logStream);
+    Log.infoln(F("Initializing web log..."));
+    #endif
+  #elif defined(WEB_LOGGING)
+    Log.begin(WEB_LOG_LEVEL, &logStream);
+    Log.infoln(F("Initializing web log..."));
+  #endif
 
   if (EEPROM_initAndCheckFactoryReset() >= 3) {
     Log.warningln("Factory reset conditions met!");
-    EEPROM_wipe();    
+    EEPROM_wipe();  
   }
 
   tsSmoothBoot = millis();
   smoothBoot = false;
 
   EEPROM_loadConfig();
+
+  Log.infoln("Configuration loaded");
 
   leds = new CRGB[configuration.ledStripSize];
 

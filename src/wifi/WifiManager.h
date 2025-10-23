@@ -1,17 +1,23 @@
-#ifndef _WIFI_MANAGER_H
-#define _WIFI_MANAGER_H
+#pragma once
 
-#ifdef ESP32
+#if defined(ESP32)
   #include <WiFi.h>
   #include <AsyncTCP.h>
-#elif ESP8266
+#elif defined(ESP8266)
   #include <ESP8266WiFi.h>
   #include <ESPAsyncTCP.h>
 #endif
 #include <ESPAsyncWebServer.h>
+#include <ArduinoJson.h>
+#include <Print.h>
 
 #include "BaseManager.h"
 #include "modes/BaseMode.h"
+
+#ifdef OLED
+  #include <Adafruit_SSD1306.h>
+  #include <Adafruit_GFX.h>
+#endif
 
 typedef enum {
   WF_CONNECTING = 0,
@@ -21,33 +27,59 @@ typedef enum {
 class CWifiManager: public CBaseManager {
 
 private:
+  bool rebootNeeded;
   uint8_t wifiRetries;
   unsigned long tMillis;
   wifi_status status;
   char softAP_SSID[32];
   char SSID[32];
-  bool rebootNeeded;
+  char mqttSubcribeTopicConfig[255];
+  unsigned long tsAPReboot;
 
+  std::vector<CBaseMode*> *modes;
+  
   AsyncWebServer* server;
+
+  JsonDocument configJson;
+  JsonDocument deviceJson;
 
   void connect();
   void listen();
 
   void handleRoot(AsyncWebServerRequest *request);
-  void handleConnect(AsyncWebServerRequest *request);
-  void handleLedMode(AsyncWebServerRequest *request);
-  void handleFactoryReset(AsyncWebServerRequest *request);
+  void handleWifi(AsyncWebServerRequest *request);
 
-  std::vector<CBaseMode*> *modes;
-        
+  void handleDevice(AsyncWebServerRequest *request);
+  void handleFactoryReset(AsyncWebServerRequest *request);
+  void handleReboot(AsyncWebServerRequest *request);
+  void handleStyleCSS(AsyncWebServerRequest *request);
+  //
+  void handleRestAPI_LED(AsyncWebServerRequest *request);
+  void handleRestAPI_Device(AsyncWebServerRequest *request);
+  void handleRestAPI_Config(AsyncWebServerRequest *request);
+
+  void printHTMLTop(Print *p);
+  void printHTMLBottom(Print *p);
+  void printHTMLMain(Print *p);
+
+  bool isApMode();
+
+  bool updateConfigFromJson(JsonDocument jsonObj);
+
+#ifdef OLED
+  Adafruit_SSD1306 *display;
+#endif
+
 public:
 	CWifiManager();
   virtual void loop();
 
+  virtual const bool isRebootNeeded() { return rebootNeeded; }
+  virtual const bool isJobDone() { return !isApMode(); }
+
   void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
-  bool isRebootNeeded() { return rebootNeeded; }
 
-  bool isApMode();
-};
-
+#ifdef OLED
+  void setDisplay(Adafruit_SSD1306* display) { this->display = display; };
 #endif
+};

@@ -1,8 +1,12 @@
 #include <Arduino.h>
 #include <EEPROM.h>
+#include <version.h>
 #include "Configuration.h"
 
 configuration_t configuration;
+#ifdef WEB_LOGGING
+  StringPrint logStream;
+#endif
 
 uint8_t EEPROM_initAndCheckFactoryReset() {
   Log.noticeln("Configuration size: %i", sizeof(configuration_t));
@@ -21,14 +25,35 @@ uint8_t EEPROM_initAndCheckFactoryReset() {
 }
 
 void EEPROM_clearFactoryReset() {
+  #if defined(ESP32)
+  //portMUX_TYPE mx = portMUX_INITIALIZER_UNLOCKED;
+  //taskENTER_CRITICAL(&mx);
+  #endif
+  
   EEPROM.write(EEPROM_FACTORY_RESET, 0);
   EEPROM.commit();
+
+  #if defined(ESP32)
+  //taskEXIT_CRITICAL(&mx);
+  #endif
 }
 
 void EEPROM_saveConfig() {
-  Log.infoln("Saving configuration to EEPROM");
+  Log.info("Saving configuration to EEPROM ... ");
+
+  #if defined(ESP32)
+  //portMUX_TYPE mx = portMUX_INITIALIZER_UNLOCKED;
+  //taskENTER_CRITICAL(&mx);
+  #endif
+  
   EEPROM.put(EEPROM_CONFIGURATION_START, configuration);
   EEPROM.commit();
+
+  #if defined(ESP32)
+  //taskEXIT_CRITICAL(&mx);
+  #endif
+  
+  Log.verboseln("Saved");
 }
 
 void EEPROM_loadConfig() {
@@ -57,6 +82,7 @@ void EEPROM_loadConfig() {
       strcpy(configuration.ntpServer, NTP_SERVER);
       configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
       configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
+      configuration.wifiPower = 78;
     #endif
   }
 
@@ -107,14 +133,81 @@ void EEPROM_loadConfig() {
 #endif
 
   Log.noticeln("Device name: %s", configuration.name);
+  Log.noticeln("Version: %s", VERSION);
 }
 
 void EEPROM_wipe() {
-  Log.warningln("Wiping configuration!");
+  Log.warningln("Wiping configuration with size %i!", EEPROM.length());
   for (uint16_t i = 0; i < EEPROM.length() ; i++) {
     EEPROM.write(i, 0);
   }
+  EEPROM.commit();
 }
+
+uint32_t CONFIG_getDeviceId() {
+    // Create AP using fallback and chip ID
+  uint32_t chipId = 0;
+  #ifdef ESP32
+    for(int i=0; i<17; i=i+8) {
+    chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
+    }
+  #elif ESP8266
+    chipId = ESP.getChipId();
+  #endif
+
+  return chipId;
+}
+
+static unsigned long tMillisUp = millis();
+unsigned long CONFIG_getUpTime() {  
+  return millis() - tMillisUp;
+}
+
+static bool isIntLEDOn = false;
+void intLEDOn() {
+  if (configuration.ledEnabled) {
+    #if (defined(SEEED_XIAO_M0) || defined(ESP8266))
+      digitalWrite(INTERNAL_LED_PIN, LOW);
+    #else
+      digitalWrite(INTERNAL_LED_PIN, HIGH);
+    #endif
+    isIntLEDOn = true;
+  }
+}
+
+void intLEDOff() {
+  #if (defined(SEEED_XIAO_M0) || defined(ESP8266))
+    digitalWrite(INTERNAL_LED_PIN, HIGH);
+  #else
+    digitalWrite(INTERNAL_LED_PIN, LOW);
+  #endif
+  isIntLEDOn = false;
+}
+
+void intLEDBlink(uint16_t ms) {
+  if (isIntLEDOn) { intLEDOff(); } else { intLEDOn(); }
+  delay(ms);
+  if (isIntLEDOn) { intLEDOff(); } else { intLEDOn(); }
+}
+
+#if defined(TEMP_SENSOR)
+  float _correct(sensorCorrection c[], float measured) {
+    if (c[0].measured + c[0].actual + c[1].measured + c[1].actual == 0) {
+      return measured;
+    }
+    float a = (c[1].actual-c[0].actual) / (c[1].measured-c[0].measured);
+    float b = c[0].actual - a * c[0].measured;
+    return a * measured + b;
+  }
+
+  float correctT(float measured) {
+    return _correct(configuration.tCorrection, measured);
+  }
+
+  float correctH(float measured) {
+    return _correct(configuration.hCorrection, measured);
+  }
+#endif
 
 #ifdef LED
 float currentLedBrightness = 0;
