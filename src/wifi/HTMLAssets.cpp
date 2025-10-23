@@ -133,34 +133,34 @@ const char htmlMain[] PROGMEM = R"=====(
           </label>
           <br/>
           <label>
-            Brightness <output id='ledBrightnessLabelId'>%u</output>%%
-            <input type='range' id='ledBrightness' name='ledBrightness' min='0' max='100' value='%u' oninput='ledBrightnessLabelId.value = ledBrightness.value'>
+            Brightness <output id='ledBrightnessLabelId'>%.0f</output>%%
+            <input type='range' id='ledBrightness' name='ledBrightness' min='0' max='100' value='%.0f' oninput='ledBrightnessLabelId.value = ledBrightness.value'>
           </label>
           <br/>
           <label>
             Frame delay in milliseconds
-            <input type='text' id='ledFrameDelay' name='ledFrameDelay' value='%u'>
+            <input type='text' id='ledDelayMs' name='ledDelayMs' value='%lu'>
           </label>
           <br/>
           <label>
             Mode duration in seconds
-            <input type='text' id='modeDuration' name='modeDuration' value='%u'><br/>
+            <input type='text' id='ledCycleModeMs' name='ledCycleModeMs' value='%lu'><br/>
             <sub><small><i>0</i> disables mode changing </small></sub>
           </label>
           </br>
           <label>
-            Brightness in power-save mode <output id='psBrightnessLabelId'>%u</output>%%
-            <input type='range' id='psBrightness' name='psBrightness' value='%0.2f' min='0' max='100' oninput='psBrightnessLabelId.value = psBrightness.value'><br/>
+            Brightness in power-save mode <output id='psLedBrightnessLabelId'>%.0f</output>%%
+            <input type='range' id='psLedBrightness' name='psLedBrightness' value='%.0f' min='0' max='100' oninput='psLedBrightnessLabelId.value = psLedBrightness.value'><br/>
           </label>
           </br>
           <label>
             Power-save start hour
-            <input type='text' id='psStartHour' name='psStartHour' value='%i'><br/>
+            <input type='text' id='psStartHour' name='psStartHour' value='%d'><br/>
           </label>
           </br>
           <label>
             Power-save end hour
-            <input type='text' id='psEndHour' name='psEndHour' value='%i'><br/>
+            <input type='text' id='psEndHour' name='psEndHour' value='%d'><br/>
           </label>
           </br>
         </fieldset>

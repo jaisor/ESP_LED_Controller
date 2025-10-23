@@ -313,11 +313,13 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
       configuration.ledBrightness = ledBrightness;
     }
 
-    configuration.ledDelayMs = atol(request->arg("ledFrameDelay").c_str());
-    configuration.ledCycleModeMs = atol(request->arg("ledFrameDelay").c_str()) * 1000;
+    configuration.ledDelayMs = atol(request->arg("ledDelayMs").c_str());
+    configuration.ledCycleModeMs = atol(request->arg("ledCycleModeMs").c_str()) * 1000;
       
     Log.noticeln("ledMode: '%i'", configuration.ledMode);
     Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
+    Log.noticeln("ledDelayMs: '%lu'", configuration.ledDelayMs);
+    Log.noticeln("ledCycleModeMs: '%lu'", configuration.ledCycleModeMs);
 
     uint16_t ledStripSize = atol(request->arg("ledStripSize").c_str());
     if (configuration.ledStripSize != ledStripSize) {
@@ -621,10 +623,10 @@ void CWifiManager::printHTMLMain(Print *p) {
   p->printf_P(htmlMain, 
     configuration.ledStripSize,
     modeOptions.c_str(), 
-    uint8_t(configuration.ledBrightness * 100), uint8_t(configuration.ledBrightness * 100), 
+    configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
     configuration.ledCycleModeMs / 1000,
-    uint8_t(configuration.psLedBrightness * 100), uint8_t(configuration.psLedBrightness * 100), 
+    configuration.psLedBrightness * 100, configuration.psLedBrightness * 100, 
     configuration.psStartHour, 
     configuration.psEndHour
   );
