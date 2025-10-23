@@ -117,12 +117,12 @@ const char htmlWifi[] PROGMEM = R"=====(
 */
 
 const char htmlMain[] PROGMEM = R"=====(
-      <h3>Sensor Settings</h3>
-      <form method='POST' action='sensor' enctype='application/x-www-form-urlencoded' delay='10000'>
+      <h3>LED Settings</h3>
+      <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
           <label>
             LED strip length
-            <input type='text' id='ledStripSize' name='ledStripSize' value='%i'>
+            <input type='text' id='ledStripSize' name='ledStripSize' value='%u'>
           </label>
           <br/>
           <label>
@@ -133,19 +133,34 @@ const char htmlMain[] PROGMEM = R"=====(
           </label>
           <br/>
           <label>
-            Brightness
-            <input type='range' id='ledBrightness' name='ledBrightness' min='0' max='100' value='%i'>
+            Brightness <output id='ledBrightnessLabelId'>%u</output>%%
+            <input type='range' id='ledBrightness' name='ledBrightness' min='0' max='100' value='%u' oninput='ledBrightnessLabelId.value = ledBrightness.value'>
           </label>
           <br/>
           <label>
             Frame delay in milliseconds
-            <input type='text' id='ledFrameDelay' name='ledFrameDelay' value='%i'>
+            <input type='text' id='ledFrameDelay' name='ledFrameDelay' value='%u'>
           </label>
           <br/>
           <label>
             Mode duration in seconds
-            <input type='text' id='modeDuration' name='modeDuration' value='%i'><br/>
+            <input type='text' id='modeDuration' name='modeDuration' value='%u'><br/>
             <sub><small><i>0</i> disables mode changing </small></sub>
+          </label>
+          </br>
+          <label>
+            Brightness in power-save mode <output id='psBrightnessLabelId'>%u</output>%%
+            <input type='range' id='psBrightness' name='psBrightness' value='%0.2f' min='0' max='100' oninput='psBrightnessLabelId.value = psBrightness.value'><br/>
+          </label>
+          </br>
+          <label>
+            Power-save start hour
+            <input type='text' id='psStartHour' name='psStartHour' value='%i'><br/>
+          </label>
+          </br>
+          <label>
+            Power-save end hour
+            <input type='text' id='psEndHour' name='psEndHour' value='%i'><br/>
           </label>
           </br>
         </fieldset>

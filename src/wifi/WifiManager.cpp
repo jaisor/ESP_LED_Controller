@@ -129,15 +129,12 @@ void CWifiManager::listen() {
 
   status = WF_LISTENING;
   // Web
-  server->on("/", std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
+  server->on("/", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
   server->on("/style.css", HTTP_GET, std::bind(&CWifiManager::handleStyleCSS, this, std::placeholders::_1));
   server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(404); });
   //
 
   server->on("/wifi", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleWifi, this, std::placeholders::_1));
-#ifdef TEMP_SENSOR
-  server->on("/sensor", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleSensor, this, std::placeholders::_1));
-#endif
   server->on("/device", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleDevice, this, std::placeholders::_1));
   //
   server->on("/factory_reset", HTTP_POST, std::bind(&CWifiManager::handleFactoryReset, this, std::placeholders::_1));
@@ -152,7 +149,27 @@ void CWifiManager::listen() {
     intLEDOff();
   });
 #endif
-  server->on("/config", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleRestAPI_Config, this, std::placeholders::_1));
+  server->on("/config", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_Config, this, std::placeholders::_1));
+  AsyncCallbackJsonWebHandler* configHandler = new AsyncCallbackJsonWebHandler("/config", [this](AsyncWebServerRequest *request, JsonVariant &json) {
+    bool success = this->updateConfigFromJson(json.as<JsonObject>());
+    if (success) {
+      EEPROM_saveConfig();
+      
+      // Return updated configuration
+      handleRestAPI_Config(request);
+      
+      // Schedule reboot if needed for certain changes
+      tMillis = millis();
+      rebootNeeded = true;
+    } else {
+      AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8");
+      response->print("ERROR: Invalid configuration data");
+      response->setCode(400);
+      request->send(response);
+    }
+  });
+  server->addHandler(configHandler);
+  
   server->on("/api", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_LED, this, std::placeholders::_1));
   AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/api", [this](AsyncWebServerRequest *request, JsonVariant &json) {
     bool success = this->updateConfigFromJson(json.as<JsonObject>());
@@ -281,11 +298,72 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   Log.traceln("handleRoot");
   intLEDOn();
 
-  AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8");
-  printHTMLTop(response);
-  printHTMLMain(response);
-  printHTMLBottom(response);
-  request->send(response);
+  if (request->method() == HTTP_POST) {
+
+    // LED Settings
+    if (modes != NULL) {
+      uint8_t ledMode = atoi(request->arg("ledMode").c_str());
+      if (ledMode<modes->size()) {
+        configuration.ledMode = ledMode;
+      }
+    }
+
+    float ledBrightness = atof(request->arg("ledBrightness").c_str())/100.0;
+    if (ledBrightness>=0.0 && ledBrightness<=1.0) {
+      configuration.ledBrightness = ledBrightness;
+    }
+
+    configuration.ledDelayMs = atol(request->arg("ledFrameDelay").c_str());
+    configuration.ledCycleModeMs = atol(request->arg("ledFrameDelay").c_str()) * 1000;
+      
+    Log.noticeln("ledMode: '%i'", configuration.ledMode);
+    Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
+
+    uint16_t ledStripSize = atol(request->arg("ledStripSize").c_str());
+    if (configuration.ledStripSize != ledStripSize) {
+      Log.noticeln("ledStripSize: '%i'", ledStripSize);
+      configuration.ledStripSize = ledStripSize;
+      tMillis = millis();
+      rebootNeeded = true;
+    }
+
+    // Power-save settings
+    float psLedBrightness = atof(request->arg("psLedBrightness").c_str())/100.0;
+    if (psLedBrightness>=0.0 && psLedBrightness<=1.0) {
+      configuration.psLedBrightness = psLedBrightness;
+      Log.noticeln("psLedBrightness: %D", configuration.psLedBrightness);
+    }
+
+    int psStartHour = atoi(request->arg("psStartHour").c_str());
+    if (psStartHour >= 0 && psStartHour < 23) {  
+      configuration.psStartHour = psStartHour;
+      Log.noticeln("psStartHour: %i", psStartHour);
+    }
+
+    int psEndHour = atoi(request->arg("psEndHour").c_str());
+    if (psEndHour >= 0 && psEndHour < 23) {  
+      configuration.psEndHour = psEndHour;
+      Log.noticeln("psEndHour: %i", psEndHour);
+    }
+
+    //
+
+    Log.noticeln("Saving configuration...");
+    EEPROM_saveConfig();
+
+    Log.noticeln("Forcing LED brightness update...");
+    CONFIG_getLedBrightness(true);
+    
+    Log.noticeln("Redirecting to root");
+    request->redirect("/");
+  
+  } else {
+    AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8");
+    printHTMLTop(response);
+    printHTMLMain(response);
+    printHTMLBottom(response);
+    request->send(response);
+  }
 
   intLEDOff();
 }
@@ -331,91 +409,6 @@ void CWifiManager::handleWifi(AsyncWebServerRequest *request) {
 
   intLEDOff();
 }
-
-#ifdef TEMP_SENSOR
-void CWifiManager::handleSensor(AsyncWebServerRequest *request) {
-  Log.traceln("handleSensor: %s", request->methodToString());
-  intLEDOn();
-
-  if (request->method() == HTTP_POST) {
-    
-    uint16_t tempUnit = atoi(request->arg("tempUnit").c_str());
-    configuration.tempUnit = tempUnit;
-    Log.infoln("Temperature unit: %u", tempUnit);
-
-    tempSensorType tempSensor = (tempSensorType)atoi(request->arg("tempSensor").c_str());
-    configuration.tempSensor = tempSensor;
-    Log.infoln("Temperature sensor type: %u", tempSensor);
-
-    configuration.tCorrection[0].measured = atoff(request->arg("tMeasured1").c_str());
-    configuration.tCorrection[0].actual = atoff(request->arg("tActual1").c_str());
-    configuration.tCorrection[1].measured = atoff(request->arg("tMeasured2").c_str());
-    configuration.tCorrection[1].actual = atoff(request->arg("tActual2").c_str());
-
-    configuration.hCorrection[0].measured = atoff(request->arg("hMeasured1").c_str());
-    configuration.hCorrection[0].actual = atoff(request->arg("hActual1").c_str());
-    configuration.hCorrection[1].measured = atoff(request->arg("hMeasured2").c_str());
-    configuration.hCorrection[1].actual = atoff(request->arg("hActual2").c_str());
-
-    configuration.voltageDivider = atoff(request->arg("voltageDivider").c_str());
-
-    EEPROM_saveConfig();
-    Log.verboseln("Config saved");
-    
-    request->redirect("sensor");
-    tMillis = millis();
-
-    Log.infoln("Requesting reboot...");
-    rebootNeeded = true;
-
-  } else {
-
-    char tempUnit[256];
-    snprintf(tempUnit, 256, "<option %s value='0'>Celsius</option>\
-      <option %s value='1'>Fahrenheit</option>", 
-      configuration.tempUnit == TEMP_UNIT_CELSIUS ? "selected" : "", 
-      configuration.tempUnit == TEMP_UNIT_FAHRENHEIT ? "selected" : "");
-    
-    char tempSensor[512] = "";
-    snprintf_P(tempSensor, 512, PSTR("\
-      <option %s value='0'>-</option>\
-      <option %s value='1'>DS18B20</option>\
-      <option %s value='2'>BME280</option>\
-      <option %s value='3'>DHT22</option>\
-      <option %s value='4'>AHT20</option>\
-      "), 
-      configuration.tempSensor == TEMP_SENSOR_UNSUPPORTED ? "selected" : "", 
-      configuration.tempSensor == TEMP_SENSOR_DS18B20 ? "selected" : "", 
-      configuration.tempSensor == TEMP_SENSOR_BME280 ? "selected" : "", 
-      configuration.tempSensor == TEMP_SENSOR_DHT22 ? "selected" : "", 
-      configuration.tempSensor == TEMP_SENSOR_AHT20 ? "selected" : ""
-    );
-
-    float t = sensorProvider->getTemperature(NULL);
-    if (configuration.tempUnit == TEMP_UNIT_FAHRENHEIT) {
-      t = t * 1.8 + 32;
-    }
-
-    AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8");
-    printHTMLTop(response);
-    response->printf_P(htmlSensor, tempSensor, tempUnit,
-      t, (configuration.tempUnit == TEMP_UNIT_CELSIUS ? "C" : (configuration.tempUnit == TEMP_UNIT_FAHRENHEIT ? "F" : "" )),
-      configuration.tCorrection[0].measured, configuration.tCorrection[0].actual,
-      configuration.tCorrection[1].measured, configuration.tCorrection[1].actual,
-      sensorProvider->getHumidity(NULL),
-      configuration.hCorrection[0].measured, configuration.hCorrection[0].actual,
-      configuration.hCorrection[1].measured, configuration.hCorrection[1].actual,
-      sensorProvider->getVoltage(NULL), sensorProvider->getVoltageADC(NULL),
-      configuration.voltageDivider
-    );
-    printHTMLBottom(response);
-    request->send(response);
-
-  }
-
-  intLEDOff();
-}
-#endif
 
 void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
   Log.traceln("handleDevice: %s", request->methodToString());
@@ -530,51 +523,44 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   Log.traceln("handleRestAPI_Config: %s", request->methodToString());
   intLEDOn();
 
-  if (request->method() == HTTP_POST) {
-    // TODO:
-    
-    request->redirect("config");
-    tMillis = millis();
-    rebootNeeded = true;
-  } else {
-    configJson.clear();
+  configJson.clear();
 
-    // Device information
-    configJson["name"] = configuration.name;
-    configJson["ledEnabled"] = configuration.ledEnabled;
+  // Device information
+  configJson["name"] = configuration.name;
+  configJson["ledEnabled"] = configuration.ledEnabled;
 
-    #ifdef WIFI
-    // WiFi settings
-    configJson["wifiSsid"] = configuration.wifiSsid;
-    configJson["wifiPower"] = configuration.wifiPower;
-    
-    // NTP settings
-    configJson["ntpServer"] = configuration.ntpServer;
-    configJson["gmtOffset_sec"] = configuration.gmtOffset_sec;
-    configJson["daylightOffset_sec"] = configuration.daylightOffset_sec;
-    #endif
+  #ifdef WIFI
+  // WiFi settings
+  configJson["wifiSsid"] = configuration.wifiSsid;
+  configJson["wifiPower"] = configuration.wifiPower;
+  
+  // NTP settings
+  configJson["ntpServer"] = configuration.ntpServer;
+  configJson["gmtOffset_sec"] = configuration.gmtOffset_sec;
+  configJson["daylightOffset_sec"] = configuration.daylightOffset_sec;
+  #endif
 
-    #ifdef LED
-    // LED settings
-    configJson["ledBrightness"] = configuration.ledBrightness;
-    configJson["ledMode"] = configuration.ledMode;
-    configJson["ledDelayMs"] = configuration.ledDelayMs;
-    configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
-    configJson["ledStripSize"] = configuration.ledStripSize;
-    configJson["psLedBrightness"] = configuration.psLedBrightness;
-    configJson["psStartHour"] = configuration.psStartHour;
-    configJson["psEndHour"] = configuration.psEndHour;
-    #endif
+  #ifdef LED
+  // LED settings
+  configJson["ledBrightness"] = configuration.ledBrightness;
+  configJson["ledMode"] = configuration.ledMode;
+  configJson["ledDelayMs"] = configuration.ledDelayMs;
+  configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
+  configJson["ledStripSize"] = configuration.ledStripSize;
+  configJson["psLedBrightness"] = configuration.psLedBrightness;
+  configJson["psStartHour"] = configuration.psStartHour;
+  configJson["psEndHour"] = configuration.psEndHour;
+  #endif
 
-    String jsonStr;
-    serializeJson(configJson, jsonStr);
-    Log.verboseln("Config: '%s'", jsonStr.c_str());
+  String jsonStr;
+  serializeJson(configJson, jsonStr);
+  Log.verboseln("Config: '%s'", jsonStr.c_str());
 
-    AsyncResponseStream *response = request->beginResponseStream("application/json; charset=UTF-8");
-    response->print(jsonStr);
-    response->setCode(200);
-    request->send(response);
-  }
+  AsyncResponseStream *response = request->beginResponseStream("application/json; charset=UTF-8");
+  response->print(jsonStr);
+  response->setCode(200);
+  request->send(response);
+
   intLEDOff();
 }
 
@@ -635,21 +621,133 @@ void CWifiManager::printHTMLMain(Print *p) {
   p->printf_P(htmlMain, 
     configuration.ledStripSize,
     modeOptions.c_str(), 
-    configuration.ledBrightness, 
+    uint8_t(configuration.ledBrightness * 100), uint8_t(configuration.ledBrightness * 100), 
     configuration.ledDelayMs, 
-    configuration.ledCycleModeMs / 1000
+    configuration.ledCycleModeMs / 1000,
+    uint8_t(configuration.psLedBrightness * 100), uint8_t(configuration.psLedBrightness * 100), 
+    configuration.psStartHour, 
+    configuration.psEndHour
   );
 
 }
 
 bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj) {
 
+  // Device information
   if (!jsonObj["name"].isNull()) {
     Log.traceln("Setting 'name' to %s", jsonObj["name"].as<const char*>());
-    strncpy(configuration.name, jsonObj["name"].as<const char*>(), 128);
+    strncpy(configuration.name, jsonObj["name"].as<const char*>(), sizeof(configuration.name) - 1);
+    configuration.name[sizeof(configuration.name) - 1] = '\0';
   }
 
-  // TODO: other settings
+  if (!jsonObj["ledEnabled"].isNull()) {
+    configuration.ledEnabled = jsonObj["ledEnabled"].as<bool>();
+    Log.traceln("Setting 'ledEnabled' to %d", configuration.ledEnabled);
+  }
+
+  #ifdef WIFI
+  // WiFi settings
+  if (!jsonObj["wifiSsid"].isNull()) {
+    strncpy(configuration.wifiSsid, jsonObj["wifiSsid"].as<const char*>(), sizeof(configuration.wifiSsid) - 1);
+    configuration.wifiSsid[sizeof(configuration.wifiSsid) - 1] = '\0';
+    Log.traceln("Setting 'wifiSsid' to %s", configuration.wifiSsid);
+    rebootNeeded = true;
+  }
+
+  if (!jsonObj["wifiPassword"].isNull()) {
+    strncpy(configuration.wifiPassword, jsonObj["wifiPassword"].as<const char*>(), sizeof(configuration.wifiPassword) - 1);
+    configuration.wifiPassword[sizeof(configuration.wifiPassword) - 1] = '\0';
+    Log.traceln("Setting 'wifiPassword'");
+    rebootNeeded = true;
+  }
+
+  if (!jsonObj["wifiPower"].isNull()) {
+    configuration.wifiPower = jsonObj["wifiPower"].as<int8_t>();
+    Log.traceln("Setting 'wifiPower' to %d", configuration.wifiPower);
+    rebootNeeded = true;
+  }
+
+  // NTP settings
+  if (!jsonObj["ntpServer"].isNull()) {
+    strncpy(configuration.ntpServer, jsonObj["ntpServer"].as<const char*>(), sizeof(configuration.ntpServer) - 1);
+    configuration.ntpServer[sizeof(configuration.ntpServer) - 1] = '\0';
+    Log.traceln("Setting 'ntpServer' to %s", configuration.ntpServer);
+    rebootNeeded = true;
+  }
+
+  if (!jsonObj["gmtOffset_sec"].isNull()) {
+    configuration.gmtOffset_sec = jsonObj["gmtOffset_sec"].as<long>();
+    Log.traceln("Setting 'gmtOffset_sec' to %l", configuration.gmtOffset_sec);
+    rebootNeeded = true;
+  }
+
+  if (!jsonObj["daylightOffset_sec"].isNull()) {
+    configuration.daylightOffset_sec = jsonObj["daylightOffset_sec"].as<int>();
+    Log.traceln("Setting 'daylightOffset_sec' to %d", configuration.daylightOffset_sec);
+    rebootNeeded = true;
+  }
+  #endif
+
+  #ifdef LED
+  // LED settings
+  if (!jsonObj["ledBrightness"].isNull()) {
+    float brightness = jsonObj["ledBrightness"].as<float>();
+    if (brightness >= 0.0 && brightness <= 1.0) {
+      configuration.ledBrightness = brightness;
+      Log.traceln("Setting 'ledBrightness' to %D", configuration.ledBrightness);
+    }
+  }
+
+  if (!jsonObj["ledMode"].isNull()) {
+    uint8_t mode = jsonObj["ledMode"].as<uint8_t>();
+    if (modes != NULL && mode < modes->size()) {
+      configuration.ledMode = mode;
+      Log.traceln("Setting 'ledMode' to %d", configuration.ledMode);
+    }
+  }
+
+  if (!jsonObj["ledDelayMs"].isNull()) {
+    configuration.ledDelayMs = jsonObj["ledDelayMs"].as<unsigned long>();
+    Log.traceln("Setting 'ledDelayMs' to %l", configuration.ledDelayMs);
+  }
+
+  if (!jsonObj["ledCycleModeMs"].isNull()) {
+    configuration.ledCycleModeMs = jsonObj["ledCycleModeMs"].as<unsigned long>();
+    Log.traceln("Setting 'ledCycleModeMs' to %l", configuration.ledCycleModeMs);
+  }
+
+  if (!jsonObj["ledStripSize"].isNull()) {
+    configuration.ledStripSize = jsonObj["ledStripSize"].as<uint16_t>();
+    Log.traceln("Setting 'ledStripSize' to %d", configuration.ledStripSize);
+  }
+
+  if (!jsonObj["psLedBrightness"].isNull()) {
+    float psBrightness = jsonObj["psLedBrightness"].as<float>();
+    if (psBrightness >= 0.0 && psBrightness <= 1.0) {
+      configuration.psLedBrightness = psBrightness;
+      Log.traceln("Setting 'psLedBrightness' to %D", configuration.psLedBrightness);
+    }
+  }
+
+  if (!jsonObj["psStartHour"].isNull()) {
+    int8_t hour = jsonObj["psStartHour"].as<int8_t>();
+    if (hour >= 0 && hour <= 23) {
+      configuration.psStartHour = hour;
+      Log.traceln("Setting 'psStartHour' to %d", configuration.psStartHour);
+    }
+  }
+
+  if (!jsonObj["psEndHour"].isNull()) {
+    int8_t hour = jsonObj["psEndHour"].as<int8_t>();
+    if (hour >= 0 && hour <= 23) {
+      configuration.psEndHour = hour;
+      Log.traceln("Setting 'psEndHour' to %d", configuration.psEndHour);
+    }
+  }
+
+  // Update LED brightness calculation if power-save settings changed
+  CONFIG_getLedBrightness(true);
+  #endif
 
   return true;
 }
