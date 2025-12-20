@@ -18,6 +18,7 @@
 #include "modes/SlavaUkrainiRingMode.h"
 
 #include "modes/WhiteLightMode.h"
+#include "modes/PixelSeparatorMode.h"
 
 CRGB* leds;
 
@@ -116,6 +117,7 @@ void setup() {
 
   FastLED.addLeds<LED_TYPE, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip );
   FastLED.setBrightness(255);
+  CONFIG_getLedBrightness(true);
 
   wifiManager = new CWifiManager();
 
@@ -145,6 +147,7 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHoneyOrangeMode(configuration.ledStripSize, "Honey Amber"));
+  modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
 
@@ -158,6 +161,7 @@ void loop() {
     smoothBoot = true;
     EEPROM_clearFactoryReset();
     Log.noticeln("Device booted smoothly!");
+    Log.verboseln("LED brightness: '%i'", 255 * CONFIG_getLedBrightness());
   }
   
   wifiManager->loop();
@@ -186,4 +190,5 @@ void loop() {
   }
 
   delay(5);
+  yield();
 }

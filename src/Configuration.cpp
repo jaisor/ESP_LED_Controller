@@ -224,18 +224,22 @@ bool isInsideInterval(int i, int8_t s, int8_t e) {
 float CONFIG_getLedBrightness(bool force) {
   #ifdef WIFI
   // Check on power save mode about once per minute
-  if (configuration.psLedBrightness < 1.0f && (configuration.psStartHour || configuration.psEndHour) && (force || millis() - tsLedBrightnessUpdate > 60000)) {
+  if (force || millis() - tsLedBrightnessUpdate > 60000) {
     tsLedBrightnessUpdate = millis();
     struct tm timeinfo;
-    bool timeUpdated = getLocalTime(&timeinfo);
-    if (timeUpdated && isInsideInterval(timeinfo.tm_hour, configuration.psStartHour, configuration.psEndHour)) {
-        currentLedBrightness = configuration.ledBrightness * configuration.psLedBrightness;
-        if (currentLedBrightness != configuration.ledBrightness) {
-          Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
-        }
+    if (configuration.psStartHour || configuration.psEndHour) {
+      bool timeUpdated = getLocalTime(&timeinfo);
+      if (timeUpdated && isInsideInterval(timeinfo.tm_hour, configuration.psStartHour, configuration.psEndHour)) {
+          currentLedBrightness = configuration.ledBrightness * configuration.psLedBrightness;
+          if (currentLedBrightness != configuration.ledBrightness) {
+            Log.infoln("Current LED brightness is '%D' compared to default '%D'", currentLedBrightness, configuration.ledBrightness);
+          }
+      } else {
+        currentLedBrightness = configuration.ledBrightness;
+      }
     } else {
       currentLedBrightness = configuration.ledBrightness;
-    }
+    }  
   }
   #else
     currentLedBrightness = configuration.ledBrightness;

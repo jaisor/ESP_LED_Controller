@@ -129,16 +129,16 @@ void CWifiManager::listen() {
 
   status = WF_LISTENING;
   // Web
-  server->on("/", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
-  server->on("/style.css", HTTP_GET, std::bind(&CWifiManager::handleStyleCSS, this, std::placeholders::_1));
+  server->on("/", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleRoot(request); });
+  server->on("/style.css", HTTP_GET, [this](AsyncWebServerRequest *request) { handleStyleCSS(request); });
   server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(404); });
   //
 
-  server->on("/wifi", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleWifi, this, std::placeholders::_1));
-  server->on("/device", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleDevice, this, std::placeholders::_1));
+  server->on("/wifi", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleWifi(request); });
+  server->on("/device", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleDevice(request); });
   //
-  server->on("/factory_reset", HTTP_POST, std::bind(&CWifiManager::handleFactoryReset, this, std::placeholders::_1));
-  server->on("/reboot", HTTP_POST, std::bind(&CWifiManager::handleReboot, this, std::placeholders::_1));
+  server->on("/factory_reset", HTTP_POST, [this](AsyncWebServerRequest *request) { handleFactoryReset(request); });
+  server->on("/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) { handleReboot(request); });
 #ifdef WEB_LOGGING
   server->on("/log", HTTP_GET, [](AsyncWebServerRequest *request){ 
     Log.traceln("handleLog");
@@ -149,7 +149,9 @@ void CWifiManager::listen() {
     intLEDOff();
   });
 #endif
-  server->on("/config", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_Config, this, std::placeholders::_1));
+  server->on("/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    handleRestAPI_Config(request);
+  });
   AsyncCallbackJsonWebHandler* configHandler = new AsyncCallbackJsonWebHandler("/config", [this](AsyncWebServerRequest *request, JsonVariant &json) {
     bool success = this->updateConfigFromJson(json.as<JsonObject>());
     if (success) {
@@ -170,7 +172,9 @@ void CWifiManager::listen() {
   });
   server->addHandler(configHandler);
   
-  server->on("/api", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_LED, this, std::placeholders::_1));
+  server->on("/api", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    handleRestAPI_LED(request);
+  });
   AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/api", [this](AsyncWebServerRequest *request, JsonVariant &json) {
     bool success = this->updateConfigFromJson(json.as<JsonObject>());
     if (success) {
@@ -196,6 +200,7 @@ void CWifiManager::listen() {
   if(getLocalTime(&timeinfo)){
     Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
   }
+  CONFIG_getLedBrightness(true);
 
   // OTA
   ElegantOTA.begin(server);
