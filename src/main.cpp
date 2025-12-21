@@ -195,9 +195,10 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Christmas Gradual", Christmas_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas Halfway", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CChristmasRunningMode(configuration.ledStripSize, "Christmas Running"));
-  modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
+  //modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
+  wifiManager->updateModeChangeTime();
 
   Log.noticeln("Setup completed!");
 }
@@ -233,6 +234,7 @@ void loop() {
       if (configuration.ledMode > modes.size()-1) {
         configuration.ledMode = 0;
       }
+      wifiManager->updateModeChangeTime();
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }

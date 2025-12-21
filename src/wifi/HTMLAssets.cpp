@@ -118,6 +118,7 @@ const char htmlWifi[] PROGMEM = R"=====(
 
 const char htmlMain[] PROGMEM = R"=====(
       <h3>LED Settings</h3>
+      <p><b>Current Mode:</b> %s <br/> <b>Next change:</b> %s</p>
       <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
           <label>

@@ -637,13 +637,33 @@ void CWifiManager::printHTMLMain(Print *p) {
   }
 
   String modeOptions = "";
+  String currentModeName = "Unknown";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
       modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
     }
+    if (configuration.ledMode < modes->size()) {
+      currentModeName = (*modes)[configuration.ledMode]->getName();
+    }
+  }
+
+  // Calculate remaining time
+  String timeRemaining;
+  if (configuration.ledCycleModeMs > 0) {
+    unsigned long elapsed = millis() - lastModeChangeMs;
+    if (elapsed < configuration.ledCycleModeMs) {
+      unsigned long remaining = (configuration.ledCycleModeMs - elapsed) / 1000;
+      timeRemaining = String(remaining) + String(" seconds");
+    } else {
+      timeRemaining = "changing now...";
+    }
+  } else {
+    timeRemaining = "indefinite";
   }
 
   p->printf_P(htmlMain, 
+    currentModeName.c_str(),
+    timeRemaining.c_str(),
     configuration.ledStripSize,
     typeOptions.c_str(),
     modeOptions.c_str(), 
