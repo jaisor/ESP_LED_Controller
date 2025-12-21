@@ -17,6 +17,7 @@
 #include "modes/RingPaletteMode.h"
 #include "modes/ColorSplitMode.h"
 #include "modes/SlavaUkrainiRingMode.h"
+#include "modes/ChristmasRunningMode.h"
 
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
@@ -180,6 +181,7 @@ void setup() {
   #endif
 
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  /*
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
@@ -189,7 +191,10 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  */
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Christmas Gradual", Christmas_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas Halfway", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CChristmasRunningMode(configuration.ledStripSize, "Christmas Running"));
   modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
