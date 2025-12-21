@@ -80,6 +80,29 @@ const TProgmemRGBPalette16 Pride_p FL_PROGMEM =
     0xFF0018,   // Vivid Red
 };
 
+const TProgmemRGBPalette16 Christmas_p FL_PROGMEM =
+{
+    0x00FF00,   // Bright Green
+    0x00CC00,   // Green
+    0x009900,   // Dark Green
+    0x228B22,   // Forest Green
+
+    0x32CD32,   // Lime Green
+    0x4CBB17,   // Kelly Green
+    0xFF6347,   // Tomato Red
+    0xFF4500,   // Orange Red
+
+    0xFF0000,   // Red
+    0xDC143C,   // Crimson
+    0xB22222,   // Fire Brick
+    0x8B0000,   // Dark Red
+
+    0xA52A2A,   // Brown
+    0xFF0000,   // Red
+    0x00AA00,   // Medium Green
+    0x00FF00,   // Bright Green
+};
+
 void setup() {
   randomSeed(analogRead(0));
   
@@ -166,6 +189,7 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
