@@ -630,7 +630,7 @@ void CWifiManager::printHTMLBottom(Print *p) {
 void CWifiManager::printHTMLMain(Print *p) {
 
   String typeOptions = "";
-  const char* ledTypes[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852"};
+  const char* ledTypes[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852", "WS2811"};
   const uint8_t numLedTypes = sizeof(ledTypes) / sizeof(ledTypes[0]);
   for (uint8_t i = 0; i < numLedTypes; i++) {
     typeOptions += String("<option") + String(i == configuration.ledType ? " selected" : "") + String(" value='") + String(i) + String("'>") + String(ledTypes[i]) + String("</option>");
