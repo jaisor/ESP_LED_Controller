@@ -129,16 +129,16 @@ void CWifiManager::listen() {
 
   status = WF_LISTENING;
   // Web
-  server->on("/", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleRoot, this, std::placeholders::_1));
-  server->on("/style.css", HTTP_GET, std::bind(&CWifiManager::handleStyleCSS, this, std::placeholders::_1));
+  server->on("/", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleRoot(request); });
+  server->on("/style.css", HTTP_GET, [this](AsyncWebServerRequest *request) { handleStyleCSS(request); });
   server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){ request->send(404); });
   //
 
-  server->on("/wifi", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleWifi, this, std::placeholders::_1));
-  server->on("/device", HTTP_GET | HTTP_POST, std::bind(&CWifiManager::handleDevice, this, std::placeholders::_1));
+  server->on("/wifi", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleWifi(request); });
+  server->on("/device", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleDevice(request); });
   //
-  server->on("/factory_reset", HTTP_POST, std::bind(&CWifiManager::handleFactoryReset, this, std::placeholders::_1));
-  server->on("/reboot", HTTP_POST, std::bind(&CWifiManager::handleReboot, this, std::placeholders::_1));
+  server->on("/factory_reset", HTTP_POST, [this](AsyncWebServerRequest *request) { handleFactoryReset(request); });
+  server->on("/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) { handleReboot(request); });
 #ifdef WEB_LOGGING
   server->on("/log", HTTP_GET, [](AsyncWebServerRequest *request){ 
     Log.traceln("handleLog");
@@ -149,7 +149,9 @@ void CWifiManager::listen() {
     intLEDOff();
   });
 #endif
-  server->on("/config", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_Config, this, std::placeholders::_1));
+  server->on("/config", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    handleRestAPI_Config(request);
+  });
   AsyncCallbackJsonWebHandler* configHandler = new AsyncCallbackJsonWebHandler("/config", [this](AsyncWebServerRequest *request, JsonVariant &json) {
     bool success = this->updateConfigFromJson(json.as<JsonObject>());
     if (success) {
@@ -170,7 +172,9 @@ void CWifiManager::listen() {
   });
   server->addHandler(configHandler);
   
-  server->on("/api", HTTP_GET, std::bind(&CWifiManager::handleRestAPI_LED, this, std::placeholders::_1));
+  server->on("/api", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    handleRestAPI_LED(request);
+  });
   AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/api", [this](AsyncWebServerRequest *request, JsonVariant &json) {
     bool success = this->updateConfigFromJson(json.as<JsonObject>());
     if (success) {
@@ -196,6 +200,7 @@ void CWifiManager::listen() {
   if(getLocalTime(&timeinfo)){
     Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
   }
+  CONFIG_getLedBrightness(true);
 
   // OTA
   ElegantOTA.begin(server);
@@ -301,6 +306,16 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
 
     // LED Settings
+    uint8_t ledType = atoi(request->arg("ledType").c_str());
+    if (ledType < 13) { // We have 13 LED types
+      if (configuration.ledType != ledType) {
+        Log.noticeln("ledType: '%i'", ledType);
+        configuration.ledType = ledType;
+        tMillis = millis();
+        rebootNeeded = true;
+      }
+    }
+    
     if (modes != NULL) {
       uint8_t ledMode = atoi(request->arg("ledMode").c_str());
       if (ledMode<modes->size()) {
@@ -546,6 +561,7 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   // LED settings
   configJson["ledBrightness"] = configuration.ledBrightness;
   configJson["ledMode"] = configuration.ledMode;
+  configJson["ledType"] = configuration.ledType;
   configJson["ledDelayMs"] = configuration.ledDelayMs;
   configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
   configJson["ledStripSize"] = configuration.ledStripSize;
@@ -613,15 +629,43 @@ void CWifiManager::printHTMLBottom(Print *p) {
 
 void CWifiManager::printHTMLMain(Print *p) {
 
+  String typeOptions = "";
+  const char* ledTypes[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852", "WS2811"};
+  const uint8_t numLedTypes = sizeof(ledTypes) / sizeof(ledTypes[0]);
+  for (uint8_t i = 0; i < numLedTypes; i++) {
+    typeOptions += String("<option") + String(i == configuration.ledType ? " selected" : "") + String(" value='") + String(i) + String("'>") + String(ledTypes[i]) + String("</option>");
+  }
+
   String modeOptions = "";
+  String currentModeName = "Unknown";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
       modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
     }
+    if (configuration.ledMode < modes->size()) {
+      currentModeName = (*modes)[configuration.ledMode]->getName();
+    }
+  }
+
+  // Calculate remaining time
+  String timeRemaining;
+  if (configuration.ledCycleModeMs > 0) {
+    unsigned long elapsed = millis() - lastModeChangeMs;
+    if (elapsed < configuration.ledCycleModeMs) {
+      unsigned long remaining = (configuration.ledCycleModeMs - elapsed) / 1000;
+      timeRemaining = String(remaining) + String(" seconds");
+    } else {
+      timeRemaining = "changing now...";
+    }
+  } else {
+    timeRemaining = "indefinite";
   }
 
   p->printf_P(htmlMain, 
+    currentModeName.c_str(),
+    timeRemaining.c_str(),
     configuration.ledStripSize,
+    typeOptions.c_str(),
     modeOptions.c_str(), 
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
@@ -705,6 +749,17 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj) {
     if (modes != NULL && mode < modes->size()) {
       configuration.ledMode = mode;
       Log.traceln("Setting 'ledMode' to %d", configuration.ledMode);
+    }
+  }
+
+  if (!jsonObj["ledType"].isNull()) {
+    uint8_t type = jsonObj["ledType"].as<uint8_t>();
+    if (type < 13) { // We have 13 LED types
+      if (configuration.ledType != type) {
+        configuration.ledType = type;
+        Log.traceln("Setting 'ledType' to %d", configuration.ledType);
+        rebootNeeded = true;
+      }
     }
   }
 

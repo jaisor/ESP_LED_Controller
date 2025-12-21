@@ -38,6 +38,8 @@ private:
 
   std::vector<CBaseMode*> *modes;
   
+  unsigned long lastModeChangeMs = 0;
+  
   AsyncWebServer* server;
 
   JsonDocument configJson;
@@ -78,6 +80,7 @@ public:
   virtual const bool isJobDone() { return !isApMode(); }
 
   void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
+  void updateModeChangeTime() { lastModeChangeMs = millis(); }
 
 #ifdef OLED
   void setDisplay(Adafruit_SSD1306* display) { this->display = display; };

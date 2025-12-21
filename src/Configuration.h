@@ -13,7 +13,7 @@
 //#define DEBUG_MOCK_HP
 //#define DISABLE_LOGGING
 #ifndef DISABLE_LOGGING
-  #define LOG_LEVEL LOG_LEVEL_INFO
+  #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
 //#define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
@@ -65,7 +65,7 @@
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
     #ifdef ESP32
-        #define LED_PIN 12
+        #define LED_PIN GPIO_NUM_12
     #elif ESP8266
         #define LED_PIN 2
     #endif
@@ -78,7 +78,6 @@
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
-    #define LED_TYPE WS2812B
     #define LED_COLOR_ORDER GRB
 #endif
 
@@ -99,6 +98,7 @@ struct configuration_t {
     #ifdef LED
         float ledBrightness;
         uint8_t ledMode;
+        uint8_t ledType;
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
         uint16_t ledStripSize;
