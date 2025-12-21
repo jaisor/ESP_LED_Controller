@@ -115,7 +115,25 @@ void setup() {
 
   leds = new CRGB[configuration.ledStripSize];
 
-  FastLED.addLeds<LED_TYPE, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip );
+  // Initialize FastLED based on configured LED type
+  switch(configuration.ledType) {
+    case 0:  FastLED.addLeds<WS2812B, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 1:  FastLED.addLeds<WS2812, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 2:  FastLED.addLeds<WS2813, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 3:  FastLED.addLeds<WS2815, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 4:  FastLED.addLeds<SK6812, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 5:  FastLED.addLeds<TM1809, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 6:  FastLED.addLeds<TM1804, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 7:  FastLED.addLeds<TM1803, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 8:  FastLED.addLeds<UCS1903, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 9:  FastLED.addLeds<UCS1904, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 10: FastLED.addLeds<GS1903, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 11: FastLED.addLeds<PL9823, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    case 12: FastLED.addLeds<WS2852, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break;
+    default: FastLED.addLeds<WS2812B, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection( TypicalLEDStrip ); break; // Default to WS2812B
+  }
+  
+  Log.infoln("LED Type configured: %d", configuration.ledType);
   FastLED.setBrightness(255);
   CONFIG_getLedBrightness(true);
 

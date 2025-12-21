@@ -126,6 +126,13 @@ const char htmlMain[] PROGMEM = R"=====(
           </label>
           <br/>
           <label>
+            LED Type
+            <select name='ledType' id='ledType'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label>
             LED Mode
             <select name='ledMode' id='ledMode'>
               %s

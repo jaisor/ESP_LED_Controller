@@ -306,6 +306,16 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
 
     // LED Settings
+    uint8_t ledType = atoi(request->arg("ledType").c_str());
+    if (ledType < 13) { // We have 13 LED types
+      if (configuration.ledType != ledType) {
+        Log.noticeln("ledType: '%i'", ledType);
+        configuration.ledType = ledType;
+        tMillis = millis();
+        rebootNeeded = true;
+      }
+    }
+    
     if (modes != NULL) {
       uint8_t ledMode = atoi(request->arg("ledMode").c_str());
       if (ledMode<modes->size()) {
@@ -551,6 +561,7 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   // LED settings
   configJson["ledBrightness"] = configuration.ledBrightness;
   configJson["ledMode"] = configuration.ledMode;
+  configJson["ledType"] = configuration.ledType;
   configJson["ledDelayMs"] = configuration.ledDelayMs;
   configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
   configJson["ledStripSize"] = configuration.ledStripSize;
@@ -618,6 +629,13 @@ void CWifiManager::printHTMLBottom(Print *p) {
 
 void CWifiManager::printHTMLMain(Print *p) {
 
+  String typeOptions = "";
+  const char* ledTypes[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852"};
+  const uint8_t numLedTypes = sizeof(ledTypes) / sizeof(ledTypes[0]);
+  for (uint8_t i = 0; i < numLedTypes; i++) {
+    typeOptions += String("<option") + String(i == configuration.ledType ? " selected" : "") + String(" value='") + String(i) + String("'>") + String(ledTypes[i]) + String("</option>");
+  }
+
   String modeOptions = "";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
@@ -627,6 +645,7 @@ void CWifiManager::printHTMLMain(Print *p) {
 
   p->printf_P(htmlMain, 
     configuration.ledStripSize,
+    typeOptions.c_str(),
     modeOptions.c_str(), 
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
@@ -710,6 +729,17 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj) {
     if (modes != NULL && mode < modes->size()) {
       configuration.ledMode = mode;
       Log.traceln("Setting 'ledMode' to %d", configuration.ledMode);
+    }
+  }
+
+  if (!jsonObj["ledType"].isNull()) {
+    uint8_t type = jsonObj["ledType"].as<uint8_t>();
+    if (type < 13) { // We have 13 LED types
+      if (configuration.ledType != type) {
+        configuration.ledType = type;
+        Log.traceln("Setting 'ledType' to %d", configuration.ledType);
+        rebootNeeded = true;
+      }
     }
   }
 

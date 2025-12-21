@@ -70,6 +70,7 @@ void EEPROM_loadConfig() {
     strcpy(configuration.name, DEVICE_NAME);
     #ifdef LED
       configuration.ledMode = 0;
+      configuration.ledType = 0; // Default to WS281B
       configuration.ledCycleModeMs = LED_CHANGE_MODE_SEC * 1000;
       configuration.ledDelayMs = 10;
       configuration.ledBrightness = LED_BRIGHTNESS;
@@ -94,6 +95,10 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.ledMode)) {
     Log.verboseln("NaN ledMode");
     configuration.ledMode = 0;
+  }
+  if (isnan(configuration.ledType)) {
+    Log.verboseln("NaN ledType");
+    configuration.ledType = 0;
   }
   if (isnan(configuration.ledCycleModeMs)) {
     Log.verboseln("NaN ledCycleModeMs");

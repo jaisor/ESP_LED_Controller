@@ -78,7 +78,6 @@
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
-    #define LED_TYPE WS2811
     #define LED_COLOR_ORDER GRB
 #endif
 
@@ -99,6 +98,7 @@ struct configuration_t {
     #ifdef LED
         float ledBrightness;
         uint8_t ledMode;
+        uint8_t ledType;
         unsigned long ledDelayMs;
         unsigned long ledCycleModeMs;
         uint16_t ledStripSize;
