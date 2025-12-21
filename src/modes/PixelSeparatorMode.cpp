@@ -13,12 +13,13 @@ void CPixelSeparatorMode::draw(CRGB *leds) {
 
   float ci = startIndex;
   for( uint16_t i = 0; i < numLeds; i++) {
+    uint8_t c = (255 * i) / numLeds;
     if (i % 2 == 0) {
-      leds[i] = CRGB(255, 0, 0);
+      leds[i] = CRGB(c, 0, 0);
     } else if (i % 3 == 0) {
-      leds[i] = CRGB(0, 255, 0);
+      leds[i] = CRGB(0, c, 0);
     } else {
-      leds[i] = CRGB(0, 0, 255);
+      leds[i] = CRGB(0, 0, c);
     }
     ci+=increment;
   }
