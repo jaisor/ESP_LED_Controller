@@ -67,7 +67,7 @@
     #ifdef ESP32
         #define LED_PIN GPIO_NUM_12
     #elif ESP8266
-        #define LED_PIN 2
+        #define LED_PIN D3
     #endif
     // 267 for RingLight, 480 for PingPong table light
     #ifdef RING_LIGHT 

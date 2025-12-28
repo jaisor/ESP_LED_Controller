@@ -18,6 +18,7 @@
 #include "modes/ColorSplitMode.h"
 #include "modes/SlavaUkrainiRingMode.h"
 #include "modes/ChristmasRunningMode.h"
+#include "modes/ChristmasRunningModeReverse.h"
 
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
@@ -195,6 +196,7 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Christmas Gradual", Christmas_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas Halfway", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CChristmasRunningMode(configuration.ledStripSize, "Christmas Running"));
+  modes.push_back(new CChristmasRunningModeReverse(configuration.ledStripSize, "Christmas Running Reverse"));
   //modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
