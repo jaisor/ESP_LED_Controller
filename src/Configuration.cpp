@@ -79,12 +79,13 @@ void EEPROM_loadConfig() {
       configuration.psStartHour = 0;
       configuration.psEndHour = 0;
     #endif
-     #ifdef WIFI
+    #ifdef WIFI
       strcpy(configuration.ntpServer, NTP_SERVER);
       configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
       configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
       configuration.wifiPower = 78;
     #endif
+    configuration.ledEnabled = false;
   }
 
 #ifdef LED
@@ -177,6 +178,8 @@ void intLEDOn() {
       digitalWrite(INTERNAL_LED_PIN, HIGH);
     #endif
     isIntLEDOn = true;
+  } else {
+    intLEDOff();
   }
 }
 

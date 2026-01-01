@@ -74,7 +74,7 @@
         #define LED_STRIP_SIZE 267
         #define OUTTER_RING_SIZE 141
     #else
-        #define LED_STRIP_SIZE 480  
+        #define LED_STRIP_SIZE 61  
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
