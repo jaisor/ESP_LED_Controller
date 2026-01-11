@@ -78,6 +78,10 @@ void EEPROM_loadConfig() {
       configuration.psLedBrightness = 1.0f;
       configuration.psStartHour = 0;
       configuration.psEndHour = 0;
+      configuration.cycleModesCount = 0;  // 0 means cycle through all modes
+      for (int i = 0; i < 32; i++) {
+        configuration.cycleModesList[i] = 0;
+      }
     #endif
     #ifdef WIFI
       strcpy(configuration.ntpServer, NTP_SERVER);
@@ -124,6 +128,10 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.psEndHour)) {
     Log.verboseln("NaN power-save end hour");
     configuration.psEndHour = 0;
+  }
+  if (isnan(configuration.cycleModesCount) || configuration.cycleModesCount > 32) {
+    Log.verboseln("Invalid cycleModesCount");
+    configuration.cycleModesCount = 0;
   }
 #endif
 

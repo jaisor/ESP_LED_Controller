@@ -105,6 +105,8 @@ struct configuration_t {
         float psLedBrightness;
         int8_t psStartHour;
         int8_t psEndHour;
+        uint8_t cycleModesCount;
+        uint8_t cycleModesList[32];  // Up to 32 modes in cycle list
     #endif
 
     char name[128];

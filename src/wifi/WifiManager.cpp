@@ -363,6 +363,46 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
       Log.noticeln("psEndHour: %i", psEndHour);
     }
 
+    // Mode cycling configuration
+    bool cycleAllModes = request->hasArg("cycleAllModes");
+    if (cycleAllModes) {
+      configuration.cycleModesCount = 0;
+      Log.noticeln("Cycle all modes enabled");
+    } else if (request->hasArg("cycleModesList")) {
+      String modesList = request->arg("cycleModesList");
+      modesList.trim();
+      if (modesList.length() > 0 && modes != NULL) {
+        uint8_t count = 0;
+        int startPos = 0;
+        int commaPos = modesList.indexOf(',');
+        
+        while (startPos < modesList.length() && count < 32) {
+          String modeStr;
+          if (commaPos == -1) {
+            modeStr = modesList.substring(startPos);
+          } else {
+            modeStr = modesList.substring(startPos, commaPos);
+          }
+          modeStr.trim();
+          
+          if (modeStr.length() > 0) {
+            uint8_t modeIndex = atoi(modeStr.c_str());
+            if (modeIndex < modes->size()) {
+              configuration.cycleModesList[count++] = modeIndex;
+              Log.verboseln("Added mode %d to cycle list", modeIndex);
+            }
+          }
+          
+          if (commaPos == -1) break;
+          startPos = commaPos + 1;
+          commaPos = modesList.indexOf(',', startPos);
+        }
+        
+        configuration.cycleModesCount = count;
+        Log.noticeln("Custom cycle with %d modes", count);
+      }
+    }
+
     //
 
     Log.noticeln("Saving configuration...");
@@ -568,6 +608,11 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   configJson["psLedBrightness"] = configuration.psLedBrightness;
   configJson["psStartHour"] = configuration.psStartHour;
   configJson["psEndHour"] = configuration.psEndHour;
+  configJson["cycleModesCount"] = configuration.cycleModesCount;
+  JsonArray cycleModes = configJson["cycleModesList"].to<JsonArray>();
+  for (uint8_t i = 0; i < configuration.cycleModesCount; i++) {
+    cycleModes.add(configuration.cycleModesList[i]);
+  }
   #endif
 
   String jsonStr;
@@ -661,6 +706,24 @@ void CWifiManager::printHTMLMain(Print *p) {
     timeRemaining = "indefinite";
   }
 
+  // Build cycle modes list string
+  String cycleModesListStr = "";
+  if (configuration.cycleModesCount > 0) {
+    for (uint8_t i = 0; i < configuration.cycleModesCount; i++) {
+      if (i > 0) cycleModesListStr += ",";
+      cycleModesListStr += String(configuration.cycleModesList[i]);
+    }
+  }
+
+  // Build available modes list string
+  String availableModesStr = "";
+  if (modes != NULL) {
+    for(uint8_t i=0; i<modes->size(); i++) {
+      if (i > 0) availableModesStr += ", ";
+      availableModesStr += String(i) + "=" + (*modes)[i]->getName();
+    }
+  }
+
   p->printf_P(htmlMain, 
     currentModeName.c_str(),
     timeRemaining.c_str(),
@@ -670,6 +733,10 @@ void CWifiManager::printHTMLMain(Print *p) {
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
     configuration.ledCycleModeMs / 1000,
+    configuration.cycleModesCount == 0 ? "checked" : "",
+    cycleModesListStr.c_str(),
+    configuration.cycleModesCount == 0 ? "disabled" : "",
+    availableModesStr.c_str(),
     configuration.psLedBrightness * 100, configuration.psLedBrightness * 100, 
     configuration.psStartHour, 
     configuration.psEndHour
@@ -799,6 +866,31 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj) {
     if (hour >= 0 && hour <= 23) {
       configuration.psEndHour = hour;
       Log.traceln("Setting 'psEndHour' to %d", configuration.psEndHour);
+    }
+  }
+
+  // Mode cycling configuration
+  if (!jsonObj["cycleModesList"].isNull() && jsonObj["cycleModesList"].is<JsonArray>()) {
+    JsonArray modeList = jsonObj["cycleModesList"].as<JsonArray>();
+    uint8_t count = min((size_t)32, modeList.size());
+    configuration.cycleModesCount = count;
+    
+    for (uint8_t i = 0; i < count; i++) {
+      uint8_t modeIndex = modeList[i].as<uint8_t>();
+      if (modes != NULL && modeIndex < modes->size()) {
+        configuration.cycleModesList[i] = modeIndex;
+      } else {
+        configuration.cycleModesList[i] = 0;
+      }
+    }
+    Log.traceln("Setting 'cycleModesList' with %d modes", configuration.cycleModesCount);
+  }
+
+  if (!jsonObj["cycleModesCount"].isNull()) {
+    uint8_t count = jsonObj["cycleModesCount"].as<uint8_t>();
+    if (count <= 32) {
+      configuration.cycleModesCount = count;
+      Log.traceln("Setting 'cycleModesCount' to %d", configuration.cycleModesCount);
     }
   }
 

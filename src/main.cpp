@@ -31,6 +31,29 @@ CWifiManager *wifiManager;
 unsigned long tsSmoothBoot;
 bool smoothBoot;
 
+const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
+{
+    0x253B80,   // PayPal Dark Blue
+    0x253B80,   // PayPal Dark Blue
+    0x169BD7,   // PayPal Light Blue
+    0x169BD7,   // PayPal Light Blue
+
+    0x222D65,   // PayPal Navy
+    0x222D65,   // PayPal Navy
+    0xFFFFFF,   // White
+    0xFFFFFF,   // White
+
+    0xFFFFFF,   // White
+    0xFFFFFF,   // White
+    0x222D65,   // PayPal Navy
+    0x222D65,   // PayPal Navy
+
+    0x169BD7,   // PayPal Light Blue
+    0x169BD7,   // PayPal Light Blue
+    0x253B80,   // PayPal Dark Blue
+    0x253B80,   // PayPal Dark Blue
+};
+
 #define S1C1 0xFFD700
 #define S1C2 0x665700
 #define S2C1 0x0057B8
@@ -181,8 +204,13 @@ void setup() {
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Pride", Pride_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   #endif
 
-  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
-  
+  // PayPal mode - first in list
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "PayPal", PayPal_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
@@ -190,8 +218,8 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
+  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
   /*
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Christmas Gradual", Christmas_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas Halfway", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
@@ -230,13 +258,29 @@ void loop() {
   FastLED.show(255 * CONFIG_getLedBrightness());
 
   if (configuration.ledCycleModeMs > 0) {
-    // Change modes every so often 
+    // Change modes every so often
     if (millis() - tsMillis > configuration.ledCycleModeMs) {
       tsMillis = millis();
-      configuration.ledMode++; 
-      if (configuration.ledMode > modes.size()-1) {
-        configuration.ledMode = 0;
+      
+      if (configuration.cycleModesCount > 0) {
+        // Cycle through custom mode list
+        static uint8_t cycleIndex = 0;
+        cycleIndex = (cycleIndex + 1) % configuration.cycleModesCount;
+        uint8_t nextMode = configuration.cycleModesList[cycleIndex];
+        if (nextMode < modes.size()) {
+          configuration.ledMode = nextMode;
+        } else {
+          cycleIndex = 0;
+          configuration.ledMode = configuration.cycleModesList[0];
+        }
+      } else {
+        // Cycle through all modes
+        configuration.ledMode++; 
+        if (configuration.ledMode > modes.size()-1) {
+          configuration.ledMode = 0;
+        }
       }
+      
       wifiManager->updateModeChangeTime();
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }

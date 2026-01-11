@@ -16,6 +16,9 @@ ESP32/ESP8266-based WiFi-controlled LED strip controller using PlatformIO and Fa
 2. LED modes registered in `std::vector<CBaseMode*> modes` during `setup()`
 3. Main loop: `modes[configuration.ledMode]->draw(leds)` → `FastLED.show()`
 4. Web UI/API modifies `configuration` → saves to EEPROM → changes take effect immediately
+5. Mode cycling: If `configuration.ledCycleModeMs > 0`:
+   - Uses `cycleModesList[]` array if `cycleModesCount > 0` (custom cycle)
+   - Otherwise cycles through all registered modes sequentially
 
 ## Hardware Variants
 
@@ -97,6 +100,27 @@ Detects 3+ reboots within 3 seconds (`FACTORY_RESET_CLEAR_TIMER_MS`). Counter st
 
 ### JSON Schema
 Configuration uses ArduinoJson v7. See `updateConfigFromJson()` in [WifiManager.cpp](../src/wifi/WifiManager.cpp) for supported fields.
+
+### Mode Cycling Configuration
+Control which modes cycle automatically:
+- **`cycleModesCount`** (uint8_t): Number of modes in custom cycle list (0 = cycle all modes)
+- **`cycleModesList`** (array): Array of mode indices to cycle through (max 32)
+- **`ledCycleModeMs`** (unsigned long): Time in milliseconds between mode changes (0 = no auto-cycling)
+
+**Via REST API** - Example JSON to cycle only modes 0, 2, and 5:
+```json
+{
+  "cycleModesCount": 3,
+  "cycleModesList": [0, 2, 5],
+  "ledCycleModeMs": 30000
+}
+```
+
+**Via Web UI** - The main page includes a collapsible "Mode Cycling Selection" section:
+- Checkbox to "Cycle through all modes" (sets `cycleModesCount=0`)
+- Text field for custom mode list with comma-separated indices (e.g., `0,2,5`)
+- Shows all available modes with their indices below the input field
+- Form automatically enables/disables the text field based on checkbox state
 
 ## Common Pitfalls
 
