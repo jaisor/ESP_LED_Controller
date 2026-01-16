@@ -229,7 +229,7 @@ void CWifiManager::loop() {
       return;
     }
 
-    #ifdef OLED
+    #ifdef OLEDA
     display->setTextSize(0);
     display->drawBitmap(0, 0, icon_wifi, 16, 16, 1);
     display->drawBitmap(18, 8, icon_ip, 8, 8, 1);

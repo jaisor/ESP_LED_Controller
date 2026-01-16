@@ -22,11 +22,13 @@
 
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
+#include "Device.h"
 
 CRGB* leds;
 
 std::vector<CBaseMode*> modes;
 CWifiManager *wifiManager;
+CDevice *device;
 
 unsigned long tsSmoothBoot;
 bool smoothBoot;
@@ -187,7 +189,11 @@ void setup() {
   FastLED.setBrightness(255);
   CONFIG_getLedBrightness(true);
 
+  device = new CDevice();
   wifiManager = new CWifiManager();
+  #ifdef OLED
+  //wifiManager->setDisplay(device->display());
+  #endif
   
   #ifdef RING_LIGHT
   modes.push_back(new CSlavaUkrainiRingMode(configuration.ledStripSize, "Slava Ukraini"));
@@ -244,6 +250,11 @@ void loop() {
     Log.verboseln("LED brightness: '%i'", 255 * CONFIG_getLedBrightness());
   }
   
+  #ifdef OLED
+    //device->display()->clearDisplay();
+  #endif
+
+  device->loop();
   wifiManager->loop();
 
   if (wifiManager->isRebootNeeded()) {
@@ -285,6 +296,10 @@ void loop() {
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }
+
+  #ifdef OLED
+    //device->display()->display();
+  #endif
 
   delay(5);
   yield();
