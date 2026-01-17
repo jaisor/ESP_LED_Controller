@@ -7,7 +7,8 @@
 
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
-#define OLED       // OLED display
+#define OLED        // OLED display
+#define BUTTONS     // Buttons
 
 //#define KEYPAD      // Buttons
 //#define RING_LIGHT
@@ -89,6 +90,11 @@
     #endif
     #define LED_BRIGHTNESS 1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
     #define LED_COLOR_ORDER GRB
+#endif
+
+#ifdef BUTTONS
+  #define BUTTON_1_PIN     GPIO_NUM_0
+  #define BUTTON_2_PIN     GPIO_NUM_1
 #endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32C3)

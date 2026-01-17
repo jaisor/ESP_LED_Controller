@@ -48,7 +48,12 @@ CDevice::CDevice() {
     u8->begin();
     u8->setContrast(255); // set contrast to maximum
     u8->setBusClock(400000); //400kHz I2C
-    //u8->setFont(u8g2_font_ncenB10_tr);
+    u8->setFont(u8x8_font_chroma48medium8_r);
+    tMillisDisplayToggle = millis();
+    displayToggleState = false;
+    wifiConnected = false;
+    strcpy(wifiSSID, "");
+    strcpy(wifiIP, "");
   #endif
 
 
@@ -65,20 +70,93 @@ CDevice::~CDevice() {
 void CDevice::loop() {
 
   #ifdef OLED
-  char st[256];
-  
-  //_display->setTextSize(0);
-  //_display->setCursor(28,24);
-  //_display->printf("Test");
-
-  //u8->clearBuffer(); // clear the internal memory
-  //u8->drawFrame(xOffset+0, yOffset+0, width, height); //draw a frame around the border
-  //u8->setCursor(xOffset+15, yOffset+25);
-  //u8->printf("%dx%d", width, height);
-  u8->setFont(u8x8_font_chroma48medium8_r);
-  u8->drawString(0,0,"HI Amazon");
-  //u8->sendBuffer(); // transfer internal memory to the display
-
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  // Alternate between SSID and IP every 3 seconds when WiFi is connected
+  if (wifiConnected && strlen(wifiSSID) > 0 && strlen(wifiIP) > 0) {
+    if (millis() - tMillisDisplayToggle > 3000) {
+      tMillisDisplayToggle = millis();
+      displayToggleState = !displayToggleState;
+      
+      u8->clearDisplay();
+      if (displayToggleState) {
+        u8->drawString(0, 0, "SSID:");
+        // Wrap SSID to next line if longer than 9 characters
+        if (strlen(wifiSSID) > 9) {
+          char line1[10];
+          strncpy(line1, wifiSSID, 9);
+          line1[9] = '\0';
+          u8->drawString(0, 1, line1);
+          u8->drawString(0, 2, wifiSSID + 9);
+        } else {
+          u8->drawString(0, 1, wifiSSID);
+        }
+      } else {
+        u8->drawString(0, 0, "IP:");
+        // Wrap IP to next line if longer than 9 characters
+        if (strlen(wifiIP) > 9) {
+          char line1[10];
+          strncpy(line1, wifiIP, 9);
+          line1[9] = '\0';
+          u8->drawString(0, 1, line1);
+          u8->drawString(0, 2, wifiIP + 9);
+        } else {
+          u8->drawString(0, 1, wifiIP);
+        }
+      }
+    }
+  }
+  #endif
   #endif
 
 }
+
+#ifdef OLED
+void CDevice::displayMessage(const char* line1, const char* line2) {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (u8) {
+    wifiConnected = false;
+    u8->clearDisplay();
+    u8->drawString(0, 0, line1);
+    if (line2) {
+      u8->drawString(0, 1, line2);
+    }
+  }
+  #endif
+}
+
+void CDevice::displayWifiInfo(const char* ssid, const char* ip) {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (u8) {
+    strncpy(wifiSSID, ssid, sizeof(wifiSSID) - 1);
+    wifiSSID[sizeof(wifiSSID) - 1] = '\0';
+    strncpy(wifiIP, ip, sizeof(wifiIP) - 1);
+    wifiIP[sizeof(wifiIP) - 1] = '\0';
+    wifiConnected = true;
+    displayToggleState = true;
+    tMillisDisplayToggle = millis();
+    
+    u8->clearDisplay();
+    u8->drawString(0, 0, "SSID:");
+    // Wrap SSID to next line if longer than 9 characters
+    if (strlen(wifiSSID) > 9) {
+      char line1[10];
+      strncpy(line1, wifiSSID, 9);
+      line1[9] = '\0';
+      u8->drawString(0, 1, line1);
+      u8->drawString(0, 2, wifiSSID + 9);
+    } else {
+      u8->drawString(0, 1, wifiSSID);
+    }
+  }
+  #endif
+}
+
+void CDevice::clearDisplay() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (u8) {
+    wifiConnected = false;
+    u8->clearDisplay();
+  }
+  #endif
+}
+#endif

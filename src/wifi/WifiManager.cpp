@@ -13,6 +13,7 @@
 #include "Configuration.h"
 #include "wifi/WifiManager.h"
 #include "wifi/HTMLAssets.h"
+#include "Device.h"
 
 #define MAX_CONNECT_TIMEOUT_MS 15000 // 10 seconds to connect before creating its own AP
 #define POST_UPDATE_INTERVAL 300000 // Every 5 min
@@ -192,6 +193,12 @@ void CWifiManager::listen() {
   Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
 
   deviceJson["ip"] = WiFi.localIP().toString();
+  
+  #ifdef OLED
+  if (device) {
+    device->displayWifiInfo(isApMode() ? softAP_SSID : SSID, WiFi.localIP().toString().c_str());
+  }
+  #endif
   
   // NTP
   Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);

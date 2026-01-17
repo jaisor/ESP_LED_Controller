@@ -138,6 +138,11 @@ void setup() {
   #endif
   pinMode(INTERNAL_LED_PIN, OUTPUT);
 
+  #ifdef BUTTONS
+    pinMode(BUTTON_1_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_2_PIN, INPUT_PULLUP);
+  #endif
+
   #ifndef DISABLE_LOGGING
   Serial.begin(SERIAL_MONITOR_BAUD); while (!Serial); delay(100);
   Log.begin(LOG_LEVEL, &Serial);
@@ -164,6 +169,11 @@ void setup() {
   Log.infoln("Configuration loaded");
   intLEDOn();
 
+  device = new CDevice();
+  #ifdef OLED
+  device->displayMessage("Initializing");
+  #endif
+
   leds = new CRGB[configuration.ledStripSize];
 
   // Initialize FastLED based on configured LED type
@@ -189,8 +199,8 @@ void setup() {
   FastLED.setBrightness(255);
   CONFIG_getLedBrightness(true);
 
-  device = new CDevice();
   wifiManager = new CWifiManager();
+  wifiManager->setDevice(device);
   #ifdef OLED
   //wifiManager->setDisplay(device->display());
   #endif
@@ -248,6 +258,9 @@ void loop() {
     EEPROM_clearFactoryReset();
     Log.noticeln("Device booted smoothly!");
     Log.verboseln("LED brightness: '%i'", 255 * CONFIG_getLedBrightness());
+    #ifdef OLED
+    device->displayMessage("Ready");
+    #endif
   }
   
   #ifdef OLED
@@ -300,6 +313,23 @@ void loop() {
   #ifdef OLED
     //device->display()->display();
   #endif
+
+  #if defined(BUTTONS) &&  defined(LED)
+/*
+    // Check button 1 - fill all LEDs red
+    if (digitalRead(BUTTON_1_PIN) == LOW) {
+      fill_solid(leds, configuration.ledStripSize, CRGB::Red);
+      FastLED.show(255 * CONFIG_getLedBrightness());
+    }
+*/    
+    // Check button 2 - fill all LEDs green
+    if (digitalRead(BUTTON_2_PIN) == LOW) {
+      fill_solid(leds, configuration.ledStripSize, CRGB::Green);
+      FastLED.show(255 * CONFIG_getLedBrightness());
+    }
+
+  #endif
+
 
   delay(5);
   yield();
