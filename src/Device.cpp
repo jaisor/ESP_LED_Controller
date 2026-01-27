@@ -42,7 +42,7 @@ CDevice::CDevice() {
   #endif
 */
 
-  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  #if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(OLED)
     u8 = new U8X8_SSD1306_72X40_ER_HW_I2C(U8X8_PIN_NONE, GPIO_NUM_6, GPIO_NUM_5);
     delay(1000);
     u8->begin();

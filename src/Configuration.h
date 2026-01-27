@@ -7,8 +7,8 @@
 
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
-#define OLED        // OLED display
-#define BUTTONS     // Buttons
+//#define OLED        // OLED display
+//#define BUTTONS     // Buttons
 
 //#define KEYPAD      // Buttons
 //#define RING_LIGHT
@@ -45,6 +45,7 @@
   #define INTERNAL_LED_PIN LED_BUILTIN
   #define DEVICE_NAME "ESP32LED"
 #elif defined(ESP8266)
+  #define INTERNAL_LED_PIN LED_BUILTIN
   #define DEVICE_NAME "ESP8266LED"
 #else
   #define INTERNAL_LED_PIN LED_BUILTIN

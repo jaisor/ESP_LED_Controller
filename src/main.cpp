@@ -200,8 +200,8 @@ void setup() {
   CONFIG_getLedBrightness(true);
 
   wifiManager = new CWifiManager();
-  wifiManager->setDevice(device);
   #ifdef OLED
+  wifiManager->setDevice(device);
   //wifiManager->setDisplay(device->display());
   #endif
   
