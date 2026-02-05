@@ -196,7 +196,11 @@ void CWifiManager::listen() {
   
   #ifdef OLED
   if (device) {
-    device->displayWifiInfo(isApMode() ? softAP_SSID : SSID, WiFi.localIP().toString().c_str());
+    if (isApMode()) {
+      //device->displayApInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
+    } else {
+      //device->displayWifiInfo(SSID, WiFi.localIP().toString().c_str());
+    }
   }
   #endif
   

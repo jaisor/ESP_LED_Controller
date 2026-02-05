@@ -5,9 +5,8 @@
 #include "Configuration.h"
 
 #ifdef OLED
-  //#include <Adafruit_SSD1306.h>
-  //#include <Adafruit_GFX.h>
-  #include <U8x8lib.h>
+  #include <Adafruit_SSD1306.h>
+  #include <Adafruit_GFX.h>
 #endif
 
 
@@ -22,13 +21,7 @@ public:
 
   #ifdef OLED
   //Adafruit_SSD1306* display() const { return _display; };
-  //Adafruit_SSD1306 *_display;
-
-  U8X8_SSD1306_72X40_ER_HW_I2C *u8;
-
-  void displayMessage(const char* line1, const char* line2 = nullptr);
-  void displayWifiInfo(const char* ssid, const char* ip);
-  void clearDisplay();
+  Adafruit_SSD1306 *_display;
   #endif
 
 private:

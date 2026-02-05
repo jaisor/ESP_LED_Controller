@@ -170,10 +170,6 @@ void setup() {
   intLEDOn();
 
   device = new CDevice();
-  #ifdef OLED
-  device->displayMessage("Initializing");
-  #endif
-
   leds = new CRGB[configuration.ledStripSize];
 
   // Initialize FastLED based on configured LED type
@@ -258,15 +254,8 @@ void loop() {
     EEPROM_clearFactoryReset();
     Log.noticeln("Device booted smoothly!");
     Log.verboseln("LED brightness: '%i'", 255 * CONFIG_getLedBrightness());
-    #ifdef OLED
-    device->displayMessage("Ready");
-    #endif
   }
   
-  #ifdef OLED
-    //device->display()->clearDisplay();
-  #endif
-
   device->loop();
   wifiManager->loop();
 
@@ -309,10 +298,6 @@ void loop() {
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }
-
-  #ifdef OLED
-    //device->display()->display();
-  #endif
 
   #if defined(BUTTONS) &&  defined(LED)
 /*
