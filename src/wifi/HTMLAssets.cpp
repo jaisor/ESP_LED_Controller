@@ -156,6 +156,20 @@ const char htmlMain[] PROGMEM = R"=====(
             <sub><small><i>0</i> disables mode changing </small></sub>
           </label>
           </br>
+          <details>
+            <summary>Mode Cycling Selection</summary>
+            <label>
+              <input type='checkbox' id='cycleAllModes' name='cycleAllModes' %s onchange='document.getElementById("cycleModesList").disabled = this.checked'>
+              Cycle through all modes
+            </label>
+            <br/>
+            <label>
+              Custom mode cycle (comma-separated indices, e.g., 0,2,5)
+              <input type='text' id='cycleModesList' name='cycleModesList' value='%s' %s>
+              <sub><small>Available modes: %s</small></sub>
+            </label>
+          </details>
+          <br/>
           <label>
             Brightness in power-save mode <output id='psLedBrightnessLabelId'>%.0f</output>%%
             <input type='range' id='psLedBrightness' name='psLedBrightness' value='%.0f' min='0' max='100' oninput='psLedBrightnessLabelId.value = psLedBrightness.value'><br/>

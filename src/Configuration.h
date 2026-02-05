@@ -7,6 +7,9 @@
 
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
+//#define OLED        // OLED display
+//#define BUTTONS     // Buttons
+
 //#define KEYPAD      // Buttons
 //#define RING_LIGHT
 
@@ -16,7 +19,7 @@
   #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-//#define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
+#define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
 #ifdef WEB_LOGGING
   #define WEB_LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
@@ -31,20 +34,23 @@
 #define EEPROM_FACTORY_RESET 0           // Byte to be used for factory reset device fails to start or is rebooted within 1 sec 3 consequitive times
 #define EEPROM_CONFIGURATION_START 1     // First EEPROM byte to be used for storing the configuration
 
-#define FACTORY_RESET_CLEAR_TIMER_MS 3000   // Clear factory reset counter when elapsed, considered smooth boot
-
-#ifdef ESP32
-  #define DEVICE_NAME "ESP32LED"
-#elif ESP8266
-  #define DEVICE_NAME "ESP8266LED"
-#endif
+#define FACTORY_RESET_CLEAR_TIMER_MS 2000   // Clear factory reset counter when elapsed, considered smooth boot
 
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
   #define INTERNAL_LED_PIN GPIO_NUM_8
+  #define DEVICE_NAME "ESP32C3LED"
+#elif defined(SEEED_XIAO_M0)
+  #define INTERNAL_LED_PIN     13
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+  #define INTERNAL_LED_PIN LED_BUILTIN
+  #define DEVICE_NAME "ESP32LED"
+#elif defined(ESP8266)
+  #define INTERNAL_LED_PIN LED_BUILTIN
+  #define DEVICE_NAME "ESP8266LED"
 #else
   #define INTERNAL_LED_PIN LED_BUILTIN
+  #define DEVICE_NAME "ESPXXLED"
 #endif
-
 
 #ifdef WIFI
     #define WIFI_SSID DEVICE_NAME
@@ -64,22 +70,42 @@
 
 #ifdef LED
     #define LED_CHANGE_MODE_SEC   60
-    #ifdef ESP32
-        #define LED_PIN GPIO_NUM_12
-    #elif ESP8266
-        #define LED_PIN 2
+    #if defined(CONFIG_IDF_TARGET_ESP32C3)
+      #define LED_PIN GPIO_NUM_2
+    #elif defined(SEEED_XIAO_M0)
+      #define LED_PIN 10
+    #elif defined(CONFIG_IDF_TARGET_ESP32)
+      #define LED_PIN GPIO_NUM_12
+    #elif defined(ESP8266)
+        #define LED_PIN D3
+    #else
+      #define LED_PIN 1
     #endif
     // 267 for RingLight, 480 for PingPong table light
     #ifdef RING_LIGHT 
         #define LED_STRIP_SIZE 267
         #define OUTTER_RING_SIZE 141
     #else
-        #define LED_STRIP_SIZE 480  
+        #define LED_STRIP_SIZE 61  
         #define OUTTER_RING_SIZE 240
     #endif
-    #define LED_BRIGHTNESS 0.1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
+    #define LED_BRIGHTNESS 1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
     #define LED_COLOR_ORDER GRB
 #endif
+
+#ifdef BUTTONS
+  #define BUTTON_1_PIN     GPIO_NUM_0
+  #define BUTTON_2_PIN     GPIO_NUM_1
+#endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+  #ifdef OLED // ESD32C3 has a built-in OLED ie ESP32C4 Dev board
+    #define OLED_SCREEN_WIDTH 72 // OLED display width, in pixels
+    #define OLED_SCREEN_HEIGHT 40 // OLED display height, in pixel
+    #define OLED_I2C_ID  0x3C
+  #endif
+#endif
+
 
 struct configuration_t {
 
@@ -105,6 +131,8 @@ struct configuration_t {
         float psLedBrightness;
         int8_t psStartHour;
         int8_t psEndHour;
+        uint8_t cycleModesCount;
+        uint8_t cycleModesList[32];  // Up to 32 modes in cycle list
     #endif
 
     char name[128];

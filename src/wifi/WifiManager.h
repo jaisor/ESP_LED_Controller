@@ -15,9 +15,10 @@
 #include "modes/BaseMode.h"
 
 #ifdef OLED
-  #include <Adafruit_SSD1306.h>
-  #include <Adafruit_GFX.h>
+  #include <U8x8lib.h>
 #endif
+
+class CDevice;
 
 typedef enum {
   WF_CONNECTING = 0,
@@ -69,7 +70,7 @@ private:
   bool updateConfigFromJson(JsonDocument jsonObj);
 
 #ifdef OLED
-  Adafruit_SSD1306 *display;
+  CDevice *device;
 #endif
 
 public:
@@ -83,6 +84,6 @@ public:
   void updateModeChangeTime() { lastModeChangeMs = millis(); }
 
 #ifdef OLED
-  void setDisplay(Adafruit_SSD1306* display) { this->display = display; };
+  void setDevice(CDevice* device) { this->device = device; };
 #endif
 };

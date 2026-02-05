@@ -78,13 +78,18 @@ void EEPROM_loadConfig() {
       configuration.psLedBrightness = 1.0f;
       configuration.psStartHour = 0;
       configuration.psEndHour = 0;
+      configuration.cycleModesCount = 0;  // 0 means cycle through all modes
+      for (int i = 0; i < 32; i++) {
+        configuration.cycleModesList[i] = 0;
+      }
     #endif
-     #ifdef WIFI
+    #ifdef WIFI
       strcpy(configuration.ntpServer, NTP_SERVER);
       configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
       configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
       configuration.wifiPower = 78;
     #endif
+    configuration.ledEnabled = false;
   }
 
 #ifdef LED
@@ -123,6 +128,10 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.psEndHour)) {
     Log.verboseln("NaN power-save end hour");
     configuration.psEndHour = 0;
+  }
+  if (isnan(configuration.cycleModesCount) || configuration.cycleModesCount > 32) {
+    Log.verboseln("Invalid cycleModesCount");
+    configuration.cycleModesCount = 0;
   }
 #endif
 
@@ -177,6 +186,8 @@ void intLEDOn() {
       digitalWrite(INTERNAL_LED_PIN, HIGH);
     #endif
     isIntLEDOn = true;
+  } else {
+    intLEDOff();
   }
 }
 

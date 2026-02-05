@@ -18,17 +18,43 @@
 #include "modes/ColorSplitMode.h"
 #include "modes/SlavaUkrainiRingMode.h"
 #include "modes/ChristmasRunningMode.h"
+#include "modes/ChristmasRunningModeReverse.h"
 
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
+#include "Device.h"
 
 CRGB* leds;
 
 std::vector<CBaseMode*> modes;
 CWifiManager *wifiManager;
+CDevice *device;
 
 unsigned long tsSmoothBoot;
 bool smoothBoot;
+
+const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
+{
+    0x253B80,   // PayPal Dark Blue
+    0x253B80,   // PayPal Dark Blue
+    0x169BD7,   // PayPal Light Blue
+    0x169BD7,   // PayPal Light Blue
+
+    0x222D65,   // PayPal Navy
+    0x222D65,   // PayPal Navy
+    0xFFFFFF,   // White
+    0xFFFFFF,   // White
+
+    0xFFFFFF,   // White
+    0xFFFFFF,   // White
+    0x222D65,   // PayPal Navy
+    0x222D65,   // PayPal Navy
+
+    0x169BD7,   // PayPal Light Blue
+    0x169BD7,   // PayPal Light Blue
+    0x253B80,   // PayPal Dark Blue
+    0x253B80,   // PayPal Dark Blue
+};
 
 #define S1C1 0xFFD700
 #define S1C2 0x665700
@@ -111,7 +137,11 @@ void setup() {
     pinMode(D0, WAKEUP_PULLUP);
   #endif
   pinMode(INTERNAL_LED_PIN, OUTPUT);
-  intLEDOn();
+
+  #ifdef BUTTONS
+    pinMode(BUTTON_1_PIN, INPUT_PULLUP);
+    pinMode(BUTTON_2_PIN, INPUT_PULLUP);
+  #endif
 
   #ifndef DISABLE_LOGGING
   Serial.begin(SERIAL_MONITOR_BAUD); while (!Serial); delay(100);
@@ -137,6 +167,12 @@ void setup() {
   EEPROM_loadConfig();
 
   Log.infoln("Configuration loaded");
+  intLEDOn();
+
+  device = new CDevice();
+  #ifdef OLED
+  device->displayMessage("Initializing");
+  #endif
 
   leds = new CRGB[configuration.ledStripSize];
 
@@ -164,6 +200,10 @@ void setup() {
   CONFIG_getLedBrightness(true);
 
   wifiManager = new CWifiManager();
+  #ifdef OLED
+  wifiManager->setDevice(device);
+  //wifiManager->setDisplay(device->display());
+  #endif
   
   #ifdef RING_LIGHT
   modes.push_back(new CSlavaUkrainiRingMode(configuration.ledStripSize, "Slava Ukraini"));
@@ -180,8 +220,13 @@ void setup() {
   modes.push_back(new CRingPaletteMode(configuration.ledStripSize, OUTTER_RING_SIZE, "Pride", Pride_p, 255.0 / ((float)configuration.ledStripSize) * 2.0));
   #endif
 
-  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
-  /*
+  // PayPal mode - first in list
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "PayPal", PayPal_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
@@ -189,12 +234,14 @@ void setup() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  */
+  //
+  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  /*
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Christmas Gradual", Christmas_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Christmas Halfway", Christmas_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CChristmasRunningMode(configuration.ledStripSize, "Christmas Running"));
+  modes.push_back(new CChristmasRunningModeReverse(configuration.ledStripSize, "Christmas Running Reverse"));
+  */
   //modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
   wifiManager->setModes(&modes);
@@ -211,8 +258,16 @@ void loop() {
     EEPROM_clearFactoryReset();
     Log.noticeln("Device booted smoothly!");
     Log.verboseln("LED brightness: '%i'", 255 * CONFIG_getLedBrightness());
+    #ifdef OLED
+    device->displayMessage("Ready");
+    #endif
   }
   
+  #ifdef OLED
+    //device->display()->clearDisplay();
+  #endif
+
+  device->loop();
   wifiManager->loop();
 
   if (wifiManager->isRebootNeeded()) {
@@ -227,17 +282,54 @@ void loop() {
   FastLED.show(255 * CONFIG_getLedBrightness());
 
   if (configuration.ledCycleModeMs > 0) {
-    // Change modes every so often 
+    // Change modes every so often
     if (millis() - tsMillis > configuration.ledCycleModeMs) {
       tsMillis = millis();
-      configuration.ledMode++; 
-      if (configuration.ledMode > modes.size()-1) {
-        configuration.ledMode = 0;
+      
+      if (configuration.cycleModesCount > 0) {
+        // Cycle through custom mode list
+        static uint8_t cycleIndex = 0;
+        cycleIndex = (cycleIndex + 1) % configuration.cycleModesCount;
+        uint8_t nextMode = configuration.cycleModesList[cycleIndex];
+        if (nextMode < modes.size()) {
+          configuration.ledMode = nextMode;
+        } else {
+          cycleIndex = 0;
+          configuration.ledMode = configuration.cycleModesList[0];
+        }
+      } else {
+        // Cycle through all modes
+        configuration.ledMode++; 
+        if (configuration.ledMode > modes.size()-1) {
+          configuration.ledMode = 0;
+        }
       }
+      
       wifiManager->updateModeChangeTime();
       Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
     }
   }
+
+  #ifdef OLED
+    //device->display()->display();
+  #endif
+
+  #if defined(BUTTONS) &&  defined(LED)
+/*
+    // Check button 1 - fill all LEDs red
+    if (digitalRead(BUTTON_1_PIN) == LOW) {
+      fill_solid(leds, configuration.ledStripSize, CRGB::Red);
+      FastLED.show(255 * CONFIG_getLedBrightness());
+    }
+*/    
+    // Check button 2 - fill all LEDs green
+    if (digitalRead(BUTTON_2_PIN) == LOW) {
+      fill_solid(leds, configuration.ledStripSize, CRGB::Green);
+      FastLED.show(255 * CONFIG_getLedBrightness());
+    }
+
+  #endif
+
 
   delay(5);
   yield();
