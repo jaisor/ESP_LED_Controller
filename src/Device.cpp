@@ -40,13 +40,10 @@ CDevice::CDevice() {
     virtualCanvas = new GFXcanvas1(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
     virtualCanvas->fillScreen(0); // Clear to black
     virtualCanvas->setTextColor(1); // White text
+    
     virtualCanvas->setTextSize(1);
     virtualCanvas->setCursor(0, 10);
-    virtualCanvas->print("Wifi: --");
-    virtualCanvas->setCursor(0, 20);
-    virtualCanvas->print("IP: 192.168.10.10");
-    virtualCanvas->setCursor(0, 30);
-    virtualCanvas->print("Device initializing...");
+    virtualCanvas->print("Init...");
     
     // Initialize scrolling
     scrollOffset = 0;
@@ -54,6 +51,14 @@ CDevice::CDevice() {
     lastScrollTime = millis();
     scrollPaused = true; // Start with a pause
     pauseStartTime = millis();
+    contentWidth = 0;
+    scrollingEnabled = false;
+    lastTimeUpdate = 0; // Force initial time update
+    showingTempMessage = false;
+    tempMessageEndTime = 0;
+    
+    // Calculate content bounds
+    updateContentBounds();
     
     tMillisDisplayToggle = millis();
     displayToggleState = false;
@@ -81,34 +86,73 @@ CDevice::~CDevice() {
 void CDevice::loop() {
   #ifdef OLED
   #ifdef CONFIG_IDF_TARGET_ESP32C3
+
+  // Check if temporary message has expired
+  if (showingTempMessage && millis() >= tempMessageEndTime) {
+    showingTempMessage = false;
+    lastTimeUpdate = 0; // Force time update
+  }
+
+  // Update time display once per minute (60000 ms) if not showing temp message
+  if (!showingTempMessage && millis() - lastTimeUpdate >= 60000) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+      lastTimeUpdate = millis();
+      
+      // Clear and redraw virtual canvas with current time
+      virtualCanvas->fillScreen(0);
+      virtualCanvas->setTextColor(1); // White text
+      virtualCanvas->setTextSize(2);
+      
+      // Format time as HH:MM AM/PM
+      int hour12 = timeinfo.tm_hour % 12;
+      if (hour12 == 0) hour12 = 12; // Convert 0 to 12 for 12-hour format
+      
+      char timeStr[16];
+      snprintf(timeStr, sizeof(timeStr), "%02d:%02d", hour12, timeinfo.tm_min);
+      int16_t textWidth = strlen(timeStr) * 12;
+      
+      virtualCanvas->setCursor((72 - textWidth) / 2, 0);
+      virtualCanvas->print(timeStr);
+      virtualCanvas->setCursor(72 / 2 - 16, 16);
+      virtualCanvas->print((timeinfo.tm_hour >= 12) ? "PM" : "AM");
+      
+      // Update content bounds after drawing
+      updateContentBounds();
+    }
+  }
   
   // Update scroll position every 50ms
   if (millis() - lastScrollTime >= 50) {
     lastScrollTime = millis();
     
-    // Check if we're in a pause state
-    if (scrollPaused) {
-      if (millis() - pauseStartTime >= SCROLL_PAUSE_MS) {
-        scrollPaused = false; // Resume scrolling
-      }
-    } else {
-      // Update scroll offset
-      scrollOffset += scrollDirection;
-      
-      // Calculate max scroll range (virtual width - hardware width)
-      int16_t maxScroll = VIRTUAL_WIDTH - OLED_SCREEN_WIDTH;
-      
-      // Check boundaries and start pause
-      if (scrollOffset >= maxScroll) {
-        scrollOffset = maxScroll;
-        scrollDirection = -1;
-        scrollPaused = true;
-        pauseStartTime = millis();
-      } else if (scrollOffset <= 0) {
-        scrollOffset = 0;
-        scrollDirection = 1;
-        scrollPaused = true;
-        pauseStartTime = millis();
+    // Only scroll if content extends beyond visible area
+    if (scrollingEnabled) {
+      // Check if we're in a pause state
+      if (scrollPaused) {
+        if (millis() - pauseStartTime >= SCROLL_PAUSE_MS) {
+          scrollPaused = false; // Resume scrolling
+        }
+      } else {
+        // Update scroll offset
+        scrollOffset += scrollDirection;
+        
+        // Calculate max scroll based on actual content width
+        int16_t maxScroll = contentWidth - OLED_SCREEN_WIDTH;
+        if (maxScroll < 0) maxScroll = 0;
+        
+        // Check boundaries and start pause
+        if (scrollOffset >= maxScroll) {
+          scrollOffset = maxScroll;
+          scrollDirection = -1;
+          scrollPaused = true;
+          pauseStartTime = millis();
+        } else if (scrollOffset <= 0) {
+          scrollOffset = 0;
+          scrollDirection = 1;
+          scrollPaused = true;
+          pauseStartTime = millis();
+        }
       }
     }
     
@@ -140,3 +184,59 @@ void CDevice::loop() {
   #endif
   #endif
 }
+
+#ifdef OLED
+void CDevice::updateContentBounds() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+  
+  // Scan virtual canvas to find rightmost occupied pixel
+  contentWidth = 0;
+  
+  for (int16_t x = VIRTUAL_WIDTH - 1; x >= 0; x--) {
+    bool columnHasContent = false;
+    for (int16_t y = 0; y < VIRTUAL_HEIGHT; y++) {
+      if (virtualCanvas->getPixel(x, y)) {
+        columnHasContent = true;
+        break;
+      }
+    }
+    if (columnHasContent) {
+      contentWidth = x + 1; // +1 because we want the width, not the index
+      break;
+    }
+  }
+  
+  // Enable scrolling only if content extends beyond visible area (72 pixels)
+  scrollingEnabled = (contentWidth > OLED_SCREEN_WIDTH);
+  
+  // Reset scroll position if scrolling is disabled
+  if (!scrollingEnabled) {
+    scrollOffset = 0;
+  }
+  
+  Log.infoln("Content width: %d, scrolling: %s", contentWidth, scrollingEnabled ? "enabled" : "disabled");
+  #endif
+}
+
+void CDevice::displayTemporaryMessage(const char* message, unsigned long durationMs) {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+  
+  // Clear and draw message
+  virtualCanvas->fillScreen(0);
+  virtualCanvas->setTextColor(1);
+  virtualCanvas->setTextSize(2);
+  
+  virtualCanvas->setCursor(0, 10);
+  virtualCanvas->print(message);
+  
+  // Update content bounds
+  updateContentBounds();
+  
+  // Set temp message tracking
+  showingTempMessage = true;
+  tempMessageEndTime = millis() + durationMs;
+  #endif
+}
+#endif

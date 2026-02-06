@@ -19,6 +19,7 @@
 #include "modes/SlavaUkrainiRingMode.h"
 #include "modes/ChristmasRunningMode.h"
 #include "modes/ChristmasRunningModeReverse.h"
+#include "modes/ChargingMode.h"
 
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
@@ -29,9 +30,12 @@ CRGB* leds;
 std::vector<CBaseMode*> modes;
 CWifiManager *wifiManager;
 CDevice *device;
+CBaseMode *chargingMode = nullptr;
 
 unsigned long tsSmoothBoot;
 bool smoothBoot;
+bool isCharging = false;
+bool wasCharging = false;
 
 const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
 {
@@ -198,7 +202,6 @@ void setup() {
   wifiManager = new CWifiManager();
   #ifdef OLED
   wifiManager->setDevice(device);
-  //wifiManager->setDisplay(device->display());
   #endif
   
   #ifdef RING_LIGHT
@@ -240,6 +243,9 @@ void setup() {
   */
   //modes.push_back(new CPixelSeparatorMode(configuration.ledStripSize, "Pixel Separator"));
   
+  // Create charging mode (not added to modes vector)
+  chargingMode = new CChargingMode(configuration.ledStripSize, "Charging");
+  
   wifiManager->setModes(&modes);
   wifiManager->updateModeChangeTime();
 
@@ -267,8 +273,11 @@ void loop() {
     configuration.ledMode = 0;
   }
 
-  modes[configuration.ledMode]->draw(leds);
-  FastLED.show(255 * CONFIG_getLedBrightness());
+  if (!isCharging) {
+    modes[configuration.ledMode]->draw(leds);
+    FastLED.show(255 * CONFIG_getLedBrightness());
+  }
+  
 
   if (configuration.ledCycleModeMs > 0) {
     // Change modes every so often
@@ -300,19 +309,28 @@ void loop() {
   }
 
   #if defined(BUTTONS) &&  defined(LED)
-/*
-    // Check button 1 - fill all LEDs red
-    if (digitalRead(BUTTON_1_PIN) == LOW) {
-      fill_solid(leds, configuration.ledStripSize, CRGB::Red);
-      FastLED.show(255 * CONFIG_getLedBrightness());
+    // Check button 2 - charging mode
+    isCharging = (digitalRead(BUTTON_2_PIN) == LOW);
+    
+    // Detect charging state change
+    if (isCharging && !wasCharging) {
+      // Charging just started
+      Log.infoln("Charging started");
+      #ifdef OLED
+      device->displayTemporaryMessage("Charging...", 5000);
+      #endif
     }
-*/    
-    // Check button 2 - fill all LEDs green
-    if (digitalRead(BUTTON_2_PIN) == LOW) {
-      fill_solid(leds, configuration.ledStripSize, CRGB::Green);
+    
+    wasCharging = isCharging;
+    
+    if (isCharging) {
+      // Use charging mode instead of configured mode
+      chargingMode->draw(leds);
       FastLED.show(255 * CONFIG_getLedBrightness());
+      delay(5);
+      yield();
+      return; // Skip normal mode processing
     }
-
   #endif
 
 

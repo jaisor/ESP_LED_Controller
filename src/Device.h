@@ -23,6 +23,9 @@ public:
   //Adafruit_SSD1306* display() const { return _display; };
   Adafruit_SSD1306 *_display;
   GFXcanvas1 *virtualCanvas;
+  
+  void updateContentBounds();
+  void displayTemporaryMessage(const char* message, unsigned long durationMs);
   #endif
 
 private:
@@ -41,6 +44,11 @@ private:
   unsigned long lastScrollTime;
   bool scrollPaused;
   unsigned long pauseStartTime;
+  int16_t contentWidth; // Rightmost occupied pixel
+  bool scrollingEnabled;
+  unsigned long lastTimeUpdate; // Track when time was last updated
+  bool showingTempMessage;
+  unsigned long tempMessageEndTime;
   static const int16_t VIRTUAL_WIDTH = 128;
   static const int16_t VIRTUAL_HEIGHT = 40;
   static const int16_t HARDWARE_X_OFFSET = 28;
