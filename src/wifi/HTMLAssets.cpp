@@ -67,6 +67,7 @@ const char htmlBottom[] PROGMEM = R"=====(
     </main>
     <footer class="container">
       <small>Version %s</small>
+      <small><a href="https://github.com/jaisor/ESP_LED_Controller">https://github.com/jaisor/ESP_LED_Controller</a>
       <small hidden="true">%s</small>
     </footer>
   </body>
@@ -106,15 +107,6 @@ const char htmlWifi[] PROGMEM = R"=====(
         <button type='submit' value='Submit'>Connect...</button>
       </form>
 )=====";
-/*
-      <label for='psLedBrightness'>Power-save brightness factor:</label><br>\
-      <input type='text' id='psLedBrightness' name='psLedBrightness' value='%.2f'> range 0.0-1.0, multiplied to the default brightness<br>\
-      <label for='psStartHour'>Power-save start hour:</label><br>\
-      <input type='text' id='psStartHour' name='psStartHour' value='%i'> (0-23)<br>\
-      <label for='psEndHour'>Power-save end hour:</label><br>\
-      <input type='text' id='psEndHour' name='psEndHour' value='%i'> (0-23)<br>\
-      <br>\
-*/
 
 const char htmlMain[] PROGMEM = R"=====(
       <h3>LED Settings</h3>

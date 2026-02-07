@@ -14,10 +14,6 @@
 #include "BaseManager.h"
 #include "modes/BaseMode.h"
 
-#ifdef OLED
-  #include <U8x8lib.h>
-#endif
-
 class CDevice;
 
 typedef enum {

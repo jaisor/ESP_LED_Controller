@@ -5,9 +5,8 @@
 #include "Configuration.h"
 
 #ifdef OLED
-  //#include <Adafruit_SSD1306.h>
-  //#include <Adafruit_GFX.h>
-  #include <U8x8lib.h>
+  #include <Adafruit_SSD1306.h>
+  #include <Adafruit_GFX.h>
 #endif
 
 
@@ -22,13 +21,11 @@ public:
 
   #ifdef OLED
   //Adafruit_SSD1306* display() const { return _display; };
-  //Adafruit_SSD1306 *_display;
-
-  U8X8_SSD1306_72X40_ER_HW_I2C *u8;
-
-  void displayMessage(const char* line1, const char* line2 = nullptr);
-  void displayWifiInfo(const char* ssid, const char* ip);
-  void clearDisplay();
+  Adafruit_SSD1306 *_display;
+  GFXcanvas1 *virtualCanvas;
+  
+  void updateContentBounds();
+  void displayTemporaryMessage(const char* message, unsigned long durationMs);
   #endif
 
 private:
@@ -40,5 +37,22 @@ private:
   char wifiSSID[32];
   char wifiIP[32];
   bool wifiConnected;
+  
+  // Virtual screen scrolling
+  int16_t scrollOffset;
+  int8_t scrollDirection;
+  unsigned long lastScrollTime;
+  bool scrollPaused;
+  unsigned long pauseStartTime;
+  int16_t contentWidth; // Rightmost occupied pixel
+  bool scrollingEnabled;
+  unsigned long lastTimeUpdate; // Track when time was last updated
+  bool showingTempMessage;
+  unsigned long tempMessageEndTime;
+  static const int16_t VIRTUAL_WIDTH = 128;
+  static const int16_t VIRTUAL_HEIGHT = 40;
+  static const int16_t HARDWARE_X_OFFSET = 28;
+  static const int16_t HARDWARE_Y_OFFSET = 24;
+  static const unsigned long SCROLL_PAUSE_MS = 500;
   #endif
 };

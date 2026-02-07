@@ -5,11 +5,9 @@
 #include "Device.h"
 
 #if defined(OLED)
-  #include <U8x8lib.h>
+  #include <Adafruit_SSD1306.h>
+  #include <Adafruit_GFX.h>
   #include <Wire.h>
-  #ifdef U8X8_HAVE_HW_SPI
-    #include <SPI.h>
-  #endif
 #endif
 
 int width = 72;
@@ -20,35 +18,48 @@ int yOffset = 24; // = (64-h)/2
 CDevice::CDevice() {
 
   tMillisUp = millis();
-/*
-  #ifdef CONFIG_IDF_TARGET_ESP32C3
-    // ESP32C3 uses GPIO 6,7 for SDA,SCL - see https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/
-    if (Wire.begin(GPIO_NUM_5, GPIO_NUM_6)) {
-      Log.errorln(F("ESP32C3 I2C Wire initialization failed on pins SDA:%d, SCL:%d"), GPIO_NUM_5, GPIO_NUM_6);
-    };
-    Wire.setBufferSize(73+5);
-    delay(1000);
-  #endif
-
-  #ifdef OLED
-    _display = new Adafruit_SSD1306(OLED_SCREEN_WIDTH, OLED_SCREEN_HEIGHT, &Wire, -1);
-    if(!_display->begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ID)) {
-        Log.errorln("SSD1306 OLED initialiation failed with ID %x", OLED_I2C_ID);
-        while (1);
-    }
-    _display->clearDisplay();
-    _display->setTextColor(WHITE);
-    _display->setTextSize(0);
-  #endif
-*/
 
   #if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(OLED)
-    u8 = new U8X8_SSD1306_72X40_ER_HW_I2C(U8X8_PIN_NONE, GPIO_NUM_6, GPIO_NUM_5);
-    delay(1000);
-    u8->begin();
-    u8->setContrast(255); // set contrast to maximum
-    u8->setBusClock(400000); //400kHz I2C
-    u8->setFont(u8x8_font_chroma48medium8_r);
+    // ESP32C3 uses GPIO 5=SDA, GPIO 6=SCL - see https://wiki.seeedstudio.com/XIAO_ESP32C3_Getting_Started/
+    Wire.begin(GPIO_NUM_5, GPIO_NUM_6);
+    Wire.setClock(400000); // 400kHz I2C
+    delay(100);
+    
+    _display = new Adafruit_SSD1306(128, 64, &Wire, -1);
+    if(!_display->begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ID)) {
+        Log.errorln("SSD1306 OLED initialization failed with ID %x", OLED_I2C_ID);
+    } else {
+        Log.infoln("OLED initialized successfully");
+        _display->clearDisplay();
+        _display->setTextColor(SSD1306_WHITE);
+        _display->setTextSize(1);
+        _display->display();
+    }
+    
+    // Create virtual canvas (128x40)
+    virtualCanvas = new GFXcanvas1(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+    virtualCanvas->fillScreen(0); // Clear to black
+    virtualCanvas->setTextColor(1); // White text
+    
+    virtualCanvas->setTextSize(1);
+    virtualCanvas->setCursor(0, 10);
+    virtualCanvas->print("Init...");
+    
+    // Initialize scrolling
+    scrollOffset = 0;
+    scrollDirection = 1; // 1 = right, -1 = left
+    lastScrollTime = millis();
+    scrollPaused = true; // Start with a pause
+    pauseStartTime = millis();
+    contentWidth = 0;
+    scrollingEnabled = false;
+    lastTimeUpdate = 0; // Force initial time update
+    showingTempMessage = false;
+    tempMessageEndTime = 0;
+    
+    // Calculate content bounds
+    updateContentBounds();
+    
     tMillisDisplayToggle = millis();
     displayToggleState = false;
     wifiConnected = false;
@@ -62,101 +73,170 @@ CDevice::CDevice() {
 
 CDevice::~CDevice() { 
 #ifdef OLED
-  delete u8;
+  if (virtualCanvas) {
+    delete virtualCanvas;
+  }
+  if (_display) {
+    delete _display;
+  }
 #endif
   Log.noticeln(F("Device destroyed"));
 }
 
 void CDevice::loop() {
-
   #ifdef OLED
   #ifdef CONFIG_IDF_TARGET_ESP32C3
-  // Alternate between SSID and IP every 3 seconds when WiFi is connected
-  if (wifiConnected && strlen(wifiSSID) > 0 && strlen(wifiIP) > 0) {
-    if (millis() - tMillisDisplayToggle > 3000) {
-      tMillisDisplayToggle = millis();
-      displayToggleState = !displayToggleState;
+
+  // Check if temporary message has expired
+  if (showingTempMessage && millis() >= tempMessageEndTime) {
+    showingTempMessage = false;
+    lastTimeUpdate = 0; // Force time update
+  }
+
+  // Update time display once per minute (60000 ms) if not showing temp message
+  if (!showingTempMessage && millis() - lastTimeUpdate >= 60000) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) {
+      lastTimeUpdate = millis();
       
-      u8->clearDisplay();
-      if (displayToggleState) {
-        u8->drawString(0, 0, "SSID:");
-        // Wrap SSID to next line if longer than 9 characters
-        if (strlen(wifiSSID) > 9) {
-          char line1[10];
-          strncpy(line1, wifiSSID, 9);
-          line1[9] = '\0';
-          u8->drawString(0, 1, line1);
-          u8->drawString(0, 2, wifiSSID + 9);
-        } else {
-          u8->drawString(0, 1, wifiSSID);
+      // Clear and redraw virtual canvas with current time
+      virtualCanvas->fillScreen(0);
+      virtualCanvas->setTextColor(1); // White text
+      virtualCanvas->setTextSize(2);
+      
+      // Format time as HH:MM AM/PM
+      int hour12 = timeinfo.tm_hour % 12;
+      if (hour12 == 0) hour12 = 12; // Convert 0 to 12 for 12-hour format
+      
+      char timeStr[16];
+      snprintf(timeStr, sizeof(timeStr), "%02d:%02d", hour12, timeinfo.tm_min);
+      int16_t textWidth = strlen(timeStr) * 12;
+      
+      virtualCanvas->setCursor((72 - textWidth) / 2, 0);
+      virtualCanvas->print(timeStr);
+      virtualCanvas->setCursor(72 / 2 - 16, 16);
+      virtualCanvas->print((timeinfo.tm_hour >= 12) ? "PM" : "AM");
+      
+      // Update content bounds after drawing
+      updateContentBounds();
+    }
+  }
+  
+  // Update scroll position every 50ms
+  if (millis() - lastScrollTime >= 50) {
+    lastScrollTime = millis();
+    
+    // Only scroll if content extends beyond visible area
+    if (scrollingEnabled) {
+      // Check if we're in a pause state
+      if (scrollPaused) {
+        if (millis() - pauseStartTime >= SCROLL_PAUSE_MS) {
+          scrollPaused = false; // Resume scrolling
         }
       } else {
-        u8->drawString(0, 0, "IP:");
-        // Wrap IP to next line if longer than 9 characters
-        if (strlen(wifiIP) > 9) {
-          char line1[10];
-          strncpy(line1, wifiIP, 9);
-          line1[9] = '\0';
-          u8->drawString(0, 1, line1);
-          u8->drawString(0, 2, wifiIP + 9);
-        } else {
-          u8->drawString(0, 1, wifiIP);
+        // Update scroll offset
+        scrollOffset += scrollDirection;
+        
+        // Calculate max scroll based on actual content width
+        int16_t maxScroll = contentWidth - OLED_SCREEN_WIDTH;
+        if (maxScroll < 0) maxScroll = 0;
+        
+        // Check boundaries and start pause
+        if (scrollOffset >= maxScroll) {
+          scrollOffset = maxScroll;
+          scrollDirection = -1;
+          scrollPaused = true;
+          pauseStartTime = millis();
+        } else if (scrollOffset <= 0) {
+          scrollOffset = 0;
+          scrollDirection = 1;
+          scrollPaused = true;
+          pauseStartTime = millis();
         }
       }
     }
+    
+    // Clear hardware display
+    _display->clearDisplay();
+    
+    // Copy visible portion of virtual canvas to hardware display
+    // The virtual canvas is 128x40, we're viewing a 72x40 window
+    // Position it at 28,24 on the 128x64 hardware display
+    for (int16_t y = 0; y < VIRTUAL_HEIGHT && y < OLED_SCREEN_HEIGHT; y++) {
+      for (int16_t x = 0; x < OLED_SCREEN_WIDTH; x++) {
+        // Get pixel from virtual canvas at scrolled position
+        int16_t virtualX = x + scrollOffset;
+        if (virtualX >= 0 && virtualX < VIRTUAL_WIDTH) {
+          uint16_t pixel = virtualCanvas->getPixel(virtualX, y);
+          if (pixel) {
+            _display->drawPixel(HARDWARE_X_OFFSET + x, HARDWARE_Y_OFFSET + y, SSD1306_WHITE);
+          }
+        }
+      }
+    }
+    
+    // Draw border for reference
+    //_display->drawRect(HARDWARE_X_OFFSET, HARDWARE_Y_OFFSET, OLED_SCREEN_WIDTH, OLED_SCREEN_HEIGHT, SSD1306_WHITE);
+    
+    _display->display();
   }
+  
   #endif
   #endif
-
 }
 
 #ifdef OLED
-void CDevice::displayMessage(const char* line1, const char* line2) {
+void CDevice::updateContentBounds() {
   #ifdef CONFIG_IDF_TARGET_ESP32C3
-  if (u8) {
-    wifiConnected = false;
-    u8->clearDisplay();
-    u8->drawString(0, 0, line1);
-    if (line2) {
-      u8->drawString(0, 1, line2);
+  if (!virtualCanvas) return;
+  
+  // Scan virtual canvas to find rightmost occupied pixel
+  contentWidth = 0;
+  
+  for (int16_t x = VIRTUAL_WIDTH - 1; x >= 0; x--) {
+    bool columnHasContent = false;
+    for (int16_t y = 0; y < VIRTUAL_HEIGHT; y++) {
+      if (virtualCanvas->getPixel(x, y)) {
+        columnHasContent = true;
+        break;
+      }
+    }
+    if (columnHasContent) {
+      contentWidth = x + 1; // +1 because we want the width, not the index
+      break;
     }
   }
+  
+  // Enable scrolling only if content extends beyond visible area (72 pixels)
+  scrollingEnabled = (contentWidth > OLED_SCREEN_WIDTH);
+  
+  // Reset scroll position if scrolling is disabled
+  if (!scrollingEnabled) {
+    scrollOffset = 0;
+  }
+  
+  Log.infoln("Content width: %d, scrolling: %s", contentWidth, scrollingEnabled ? "enabled" : "disabled");
   #endif
 }
 
-void CDevice::displayWifiInfo(const char* ssid, const char* ip) {
+void CDevice::displayTemporaryMessage(const char* message, unsigned long durationMs) {
   #ifdef CONFIG_IDF_TARGET_ESP32C3
-  if (u8) {
-    strncpy(wifiSSID, ssid, sizeof(wifiSSID) - 1);
-    wifiSSID[sizeof(wifiSSID) - 1] = '\0';
-    strncpy(wifiIP, ip, sizeof(wifiIP) - 1);
-    wifiIP[sizeof(wifiIP) - 1] = '\0';
-    wifiConnected = true;
-    displayToggleState = true;
-    tMillisDisplayToggle = millis();
-    
-    u8->clearDisplay();
-    u8->drawString(0, 0, "SSID:");
-    // Wrap SSID to next line if longer than 9 characters
-    if (strlen(wifiSSID) > 9) {
-      char line1[10];
-      strncpy(line1, wifiSSID, 9);
-      line1[9] = '\0';
-      u8->drawString(0, 1, line1);
-      u8->drawString(0, 2, wifiSSID + 9);
-    } else {
-      u8->drawString(0, 1, wifiSSID);
-    }
-  }
-  #endif
-}
-
-void CDevice::clearDisplay() {
-  #ifdef CONFIG_IDF_TARGET_ESP32C3
-  if (u8) {
-    wifiConnected = false;
-    u8->clearDisplay();
-  }
+  if (!virtualCanvas) return;
+  
+  // Clear and draw message
+  virtualCanvas->fillScreen(0);
+  virtualCanvas->setTextColor(1);
+  virtualCanvas->setTextSize(2);
+  
+  virtualCanvas->setCursor(0, 10);
+  virtualCanvas->print(message);
+  
+  // Update content bounds
+  updateContentBounds();
+  
+  // Set temp message tracking
+  showingTempMessage = true;
+  tempMessageEndTime = millis() + durationMs;
   #endif
 }
 #endif
