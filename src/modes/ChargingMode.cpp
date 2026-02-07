@@ -16,29 +16,26 @@ void CChargingMode::draw(CRGB *leds) {
     
     float progress = (float)elapsed / (float)CHARGE_DURATION_MS;
     
-    // Calculate how many LEDs should be lit based on progress
-    uint16_t litLeds = (uint16_t)(progress * numLeds);
+    // Calculate the position of the running green pixel
+    uint16_t pixelPosition = (uint16_t)(progress * numLeds);
     
-    // Fill LEDs progressively
+    // Calculate the gradient shift amount (oscillates red to yellow)
+    float gradientShift = sin(progress * 2.0 * PI) * 0.5 + 0.5; // 0.0 to 1.0
+    
+    // Draw background gradient and running pixel
     for (uint16_t i = 0; i < numLeds; i++) {
-        if (i < litLeds) {
-            // LED is lit - calculate its color based on position
-            // Transition from red (0) -> yellow (64) -> green (96)
-            float ledProgress = (float)i / (float)numLeds;
-            
-            uint8_t hue;
-            if (ledProgress < 0.5) {
-                // First half: red to yellow
-                hue = HUE_RED + (uint8_t)((ledProgress * 2.0) * (HUE_YELLOW - HUE_RED));
-            } else {
-                // Second half: yellow to green
-                hue = HUE_YELLOW + (uint8_t)(((ledProgress - 0.5) * 2.0) * (HUE_GREEN - HUE_YELLOW));
-            }
-            
-            leds[numLeds - i] = CHSV(hue, 255, 255);
-        } else {
-            // LED is off
-            leds[numLeds - i] = CRGB::Red;
+        // Create red-yellow gradient background
+        float ledPosition = (float)i / (float)numLeds;
+        
+        // Gradient shifts from red to yellow based on position and time
+        uint8_t hue = HUE_RED + (uint8_t)((ledPosition + gradientShift) * (HUE_YELLOW - HUE_RED)) % (HUE_YELLOW - HUE_RED + 1);
+        
+        // Set background color
+        leds[i] = CHSV(hue, 255, 200);
+        
+        // Draw the green running pixel
+        if (i == pixelPosition) {
+            leds[i] = CRGB::Green;
         }
     }
 }

@@ -61,15 +61,15 @@
     #define WIFI_FALLBACK_PASS "password123"
 
     #define NTP_SERVER "pool.ntp.org"
-    #define NTP_GMT_OFFSET_SEC -25200
-    #define NTP_DAYLIGHT_OFFSET_SEC 0
+    #define NTP_GMT_OFFSET_SEC -28800  // Pacific Standard Time (UTC-8), DST handled automatically
+    #define NTP_DAYLIGHT_OFFSET_SEC 0  // Deprecated, kept for compatibility
 
     // Web server
     #define WEB_SERVER_PORT 80
 #endif
 
 #ifdef LED
-    #define LED_CHANGE_MODE_SEC   60
+    #define LED_CHANGE_MODE_SEC   0
     #if defined(CONFIG_IDF_TARGET_ESP32C3)
       #define LED_PIN GPIO_NUM_2
     #elif defined(SEEED_XIAO_M0)
@@ -86,7 +86,7 @@
         #define LED_STRIP_SIZE 267
         #define OUTTER_RING_SIZE 141
     #else
-        #define LED_STRIP_SIZE 61  
+        #define LED_STRIP_SIZE 90  
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly

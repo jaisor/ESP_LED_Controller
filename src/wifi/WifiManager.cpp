@@ -44,6 +44,35 @@ int dBmtoPercentage(int dBm) {
   return quality;
 }
 
+/**
+ * Get POSIX timezone string for automatic DST handling
+ * Maps GMT offset (in seconds) to timezone string
+ * POSIX format: STD offset [DST [offset],start[/time],end[/time]]
+ * DST transitions: M3.2.0 = 2nd Sunday of March, M11.1.0 = 1st Sunday of November
+ */
+const char* getTzString(long gmtOffset_sec) {
+  int hours = gmtOffset_sec / 3600;
+  
+  // Map common US timezones with DST support
+  switch(hours) {
+    case -8: return "PST8PDT,M3.2.0,M11.1.0";     // Pacific Time (US West Coast)
+    case -7: return "MST7MDT,M3.2.0,M11.1.0";     // Mountain Time (US)
+    case -6: return "CST6CDT,M3.2.0,M11.1.0";     // Central Time (US)
+    case -5: return "EST5EDT,M3.2.0,M11.1.0";     // Eastern Time (US)
+    case -10: return "HST10HDT,M3.2.0,M11.1.0";   // Hawaii-Aleutian Time
+    case -9: return "AKST9AKDT,M3.2.0,M11.1.0";   // Alaska Time
+    case 0: return "GMT0BST,M3.5.0/1,M10.5.0";    // UK (BST transitions)
+    case 1: return "CET-1CEST,M3.5.0,M10.5.0/3";  // Central Europe
+    case 2: return "EET-2EEST,M3.5.0/3,M10.5.0/4"; // Eastern Europe
+    default: {
+      // For other timezones, create a simple string without DST
+      static char tzStr[16];
+      snprintf(tzStr, sizeof(tzStr), "UTC%+d", -hours);
+      return tzStr;
+    }
+  }
+}
+
 CWifiManager::CWifiManager()
 :rebootNeeded(false), wifiRetries(0) {
 
@@ -204,9 +233,10 @@ void CWifiManager::listen() {
   }
   #endif
   
-  // NTP
-  Log.infoln("Configuring time from %s at %i (%i)", configuration.ntpServer, configuration.gmtOffset_sec, configuration.daylightOffset_sec);
-  configTime(configuration.gmtOffset_sec, configuration.daylightOffset_sec, configuration.ntpServer);
+  // NTP - Using POSIX timezone string for automatic DST handling
+  const char* timezone = getTzString(configuration.gmtOffset_sec);
+  Log.infoln("Configuring time from %s with timezone %s (GMT offset: %i)", configuration.ntpServer, timezone, configuration.gmtOffset_sec);
+  configTzTime(timezone, configuration.ntpServer);
   struct tm timeinfo;
   if(getLocalTime(&timeinfo)){
     Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
