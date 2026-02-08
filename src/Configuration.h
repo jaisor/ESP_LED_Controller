@@ -7,8 +7,8 @@
 
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
-//#define OLED        // OLED display
-//#define BUTTONS     // Buttons
+#define OLED        // OLED display
+#define BUTTONS     // Buttons
 
 //#define KEYPAD      // Buttons
 //#define RING_LIGHT
@@ -27,7 +27,7 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32C3
   #define SERIAL_MONITOR_BAUD 460800
-  //#define DISABLE_LOGGING // Xiao's setup with USB requires serial to be initialized on the IDE else it blocks
+  #define DISABLE_LOGGING // Xiao's setup with USB requires serial to be initialized on the IDE else it blocks
 #else
   #define SERIAL_MONITOR_BAUD 115200
 #endif
