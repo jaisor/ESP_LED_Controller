@@ -6,6 +6,15 @@
 configuration_t configuration;
 #ifdef WEB_LOGGING
   StringPrint logStream;
+
+  void trimLogStream() {
+    if (logStream.str().length() > WEB_LOG_MAX_SIZE) {
+      // Keep only the most recent half of the buffer
+      String s = logStream.str().c_str();
+      logStream.str("");
+      logStream.print(s.substring(s.length() - WEB_LOG_MAX_SIZE / 2));
+    }
+  }
 #endif
 
 uint8_t EEPROM_initAndCheckFactoryReset() {
@@ -244,7 +253,7 @@ float CONFIG_getLedBrightness(bool force) {
     tsLedBrightnessUpdate = millis();
     struct tm timeinfo;
     if (configuration.psStartHour || configuration.psEndHour) {
-      bool timeUpdated = getLocalTime(&timeinfo);
+      bool timeUpdated = getLocalTime(&timeinfo, 100); // Short timeout to avoid blocking when NTP is unavailable
       if (timeUpdated && isInsideInterval(timeinfo.tm_hour, configuration.psStartHour, configuration.psEndHour)) {
           currentLedBrightness = configuration.ledBrightness * configuration.psLedBrightness;
           if (currentLedBrightness != configuration.ledBrightness) {

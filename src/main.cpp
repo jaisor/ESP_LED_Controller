@@ -92,6 +92,10 @@ void loop() {
   wifiManager->loop();
   ledManager->loop();
 
+  #ifdef WEB_LOGGING
+  trimLogStream();
+  #endif
+
   if (wifiManager->isRebootNeeded()) {
     return;
   }

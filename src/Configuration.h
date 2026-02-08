@@ -22,6 +22,7 @@
 #define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
 #ifdef WEB_LOGGING
   #define WEB_LOG_LEVEL LOG_LEVEL_VERBOSE
+  #define WEB_LOG_MAX_SIZE 8192  // Cap log buffer to 8KB to prevent heap exhaustion
 #endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32C3
@@ -145,6 +146,7 @@ struct configuration_t {
 extern configuration_t configuration;
 #ifdef WEB_LOGGING
   extern StringPrint logStream;
+  void trimLogStream();
 #endif
 
 uint8_t EEPROM_initAndCheckFactoryReset();

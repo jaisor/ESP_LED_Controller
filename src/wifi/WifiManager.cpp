@@ -175,6 +175,7 @@ void CWifiManager::listen() {
     intLEDOn();
     AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8");
     response->println(logStream.str().c_str());
+    logStream.str(""); // Clear after reading to free memory
     request->send(response);
     intLEDOff();
   });
@@ -238,7 +239,7 @@ void CWifiManager::listen() {
   Log.infoln("Configuring time from %s with timezone %s (GMT offset: %i)", configuration.ntpServer, timezone, configuration.gmtOffset_sec);
   configTzTime(timezone, configuration.ntpServer);
   struct tm timeinfo;
-  if(getLocalTime(&timeinfo)){
+  if(getLocalTime(&timeinfo, 100)){ // Short timeout - NTP may not be available in AP mode
     Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
   }
   CONFIG_getLedBrightness(true);

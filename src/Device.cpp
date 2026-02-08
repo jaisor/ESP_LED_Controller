@@ -96,7 +96,7 @@ void CDevice::loop() {
   // Update time display once per minute (60000 ms) if not showing temp message
   if (!showingTempMessage && millis() - lastTimeUpdate >= 60000) {
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
+    if (getLocalTime(&timeinfo, 100)) { // Short timeout to avoid blocking when NTP is unavailable
       lastTimeUpdate = millis();
       
       // Clear and redraw virtual canvas with current time
