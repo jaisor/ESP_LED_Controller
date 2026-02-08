@@ -2,7 +2,7 @@ name: PlatformIO CI
 
 on:
   push:
-    branches: [led_headphone_stand, led_right_light, led_hexagon_cell]
+    branches: [led_headphone_stand, led_right_light, led_cell]
 
 jobs:
   build:
