@@ -1,67 +1,111 @@
-# RingLight ESP LED Controller
-
+# Over-engineered Headphone Stand with Wireless Phone Charger
 ![Glamor shot](img/Collage.jpg)
 
-## Features
-* Two LED rings - outer (141 LEDs) and inner (126 LEDs) wired up in series for a total of 267 LEDs
-* Controlled by ESP32 (most stable). Code is compatible with ESP8266, but I was suffering stability issues with wifi and longer LED strips.
-* WiFi connected and managed
-    * creates a default AP, listening to http://192.168.4.1
-    * capable of joining existing 2.4GHz networks
-    * serves a webpage for managing LED - strip size, mode, brightness
-* Firmware update over WiFi - new `firmware.bin` file can be uploaded at `/update` after the IP address
+https://makerworld.com/en/models/2347791-over-engineered-headphone-stand-and-phone-charger#profileId-2567275
 
-## Components
-* ESP32 - https://www.amazon.com/gp/product/B086MGH7JV
-* JST SM 3PIN LED Connector - https://www.amazon.com/gp/product/B075K4HLTQ
-* DC power connector - https://www.amazon.com/gp/product/B01N8VV78D
-* WS2812B LED strip high density strips 144 LEDs per strip x 2 - https://www.amazon.com/gp/product/B088FKZWDQ
-* DC 5v adapter - https://www.amazon.com/gp/product/B078RXZM4C
+## Description
+* Headphone stand
+* Wireless phone charger with Magsafe
+* LEDs driven by an ESP32C3 with OLED display accessible via wifi/web to change mode, brightness and more
 
-## 3D filament 
-I used the ones below but likely many others will work. Make sure the white is translucent enough, print a 3 layer sheet and put it in-front of some LEDs.
-* ESUN PLA+ warm white - https://www.amazon.com/gp/product/B01EKEMIIS
-* ERYONE Matte PLA black - https://www.amazon.com/gp/product/B08HX1XF55
+## Getting the firmware
 
-## Assembly and wiring
+You can obtain `firmware.bin` in one of two ways:
 
-Print 4 of each:
-* [Dark Ring](stl/DarkRing.stl)
-* [Light Ring](stl/LightRing.stl)
-* [Bridge Hanger](stl/Hanger.stl)
+### Option 1: Build from source
+1. Clone this repository and install [PlatformIO](https://platformio.org/).
+2. Build the firmware:
+   ```bash
+   pio run -e esp32c3
+   ```
+3. The built binary is at `.pio/build/esp32c3/firmware.bin`.
 
-Assemble as described below. Rotate the light ring segments by 45 degrees so they join in the middle of the dark ring segments. 
-This improves stability. If loose-fitting, use a few drops of superglue to set the dark and light rings together.
-![Assembly diagram](img/AssemblyAnnotated.png)
+### Option 2: Download a pre-built binary
+1. Go to the GitHub repository: https://github.com/jaisor/ESP_LED_Controller/tree/led_headphone_stand
+2. Download `firmware.bin` from the latest **release tag** or from the **build artifacts** attached to the most recent workflow run.
 
-Cut the two LED strips to 141 and 126 LEDs. Keep as many of the existing wires and connectors as possible. 
-Wire the strips data in series - outer first then inner. The beginning of the outer ring data pin goes to the connector data pin. 
-Join the power wires in parallel: 5V/VCC together to the 5V connector pin; GND(-) together to GND on connector pin. 
-Providing power to both start and ends of the strips reduces voltage sag and ensures even light at all brightness levels.
+## Firmware flashing
 
-![Schematic](img/Schematic.png)
-![Wiring Closeup](img/WiringCloseup.jpg)
-![Wiring Complete](img/WiringComplete.jpg)
+### Initial (USB)
+1. Connect the ESP32C3 via USB and flash using `esptool`:
+   ```bash
+   esptool.py --chip esp32c3 --port <COM_PORT> --baud 921600 write_flash 0x0 firmware.bin
+   ```
+   Replace `<COM_PORT>` with your serial port (e.g. `COM3` on Windows, `/dev/ttyUSB0` on Linux).
 
-By default in `Configuration.h` the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed.
+   Alternatively, if you built from source, use PlatformIO's built-in upload:
+   ```bash
+   pio run -e esp32c3 -t upload
+   ```
 
-__LED_PIN_STRIP = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
+### OTA
+1. Open a browser and navigate to `http://<device_ip>/update` (the device IP is shown on the OLED display or in serial output).
+2. The ElegantOTA interface will load — select `firmware.bin` and click **Update**.
+3. The device will flash the new firmware and reboot automatically.
 
-![ESP32 pins](img/ESP32_pins.png)
+## WiFi connection
+![Wifi webpage](img/Wifi.png)
 
-Solder the power and data cables between the LED connector, ESP32 and DC connector as shown below, using the basic 3D printable enclosure.
-The board is mounted above the DC connector with 3mm screws
+1. On first boot (or after a factory reset), the device has no saved WiFi credentials. It will automatically create a **soft access point** named `ESP32C3LED_<device_id>` with the default password `password123`.
+2. Connect to that network from your phone or computer.
+3. Open a browser and go to `http://192.168.4.1/wifi`.
+4. Enter your home WiFi network SSID and password, then submit the form.
+5. The device will save the credentials to EEPROM, reboot, and connect to your WiFi network.
+6. Once connected, the device's IP address is displayed on the OLED screen. Use that IP to access the web UI and API.
 
-![ESP32 box assembled](img/ESP_box_assembled.jpg)
-![ESP32 box](img/ESP_box.jpg)
+> **Tip:** If the device ever fails to connect to the saved network, it will fall back to creating the soft AP again so you can reconfigure it.
 
-Enclosure STL files. Print in PLA, PETG or any other hard filament.
-* [ESP32 Case STL](stl/ESP32Case.stl)
-* [ESP32 Lid STL](stl/ESP32Lid.stl)
+## Factory Reset
+If the device is misbehaving or you want to start fresh, you can trigger a factory reset by **power-cycling the device 3 times within 2 seconds** (plug/unplug rapidly). On the third boot the firmware detects the rapid reboot pattern, wipes EEPROM, and restores all settings to defaults. After a factory reset the device will boot with no saved WiFi credentials and create its soft access point again (see [WiFi connection](#wifi-connection) above).
 
-## Configuration.h
+You can also trigger a factory reset from the web UI by sending a POST request to `/factory_reset`.
 
-This file configures various default settings, like:
-* ESP pin used to drive the LED data (defaults are referenced below)
-* WiFi AP name/password
-* LED strip type, size, default brightness
+## LED configuration
+![LED webpage](img/Main.png)
+
+The main page (`/`) lets you control all LED-related settings:
+
+| Setting | Description |
+|---|---|
+| **LED Type** | The LED chipset type (e.g. WS2812B, WS2811, etc.). Changing this requires a reboot. |
+| **LED Mode** | The active animation pattern. Each registered mode has an index shown in the mode list. |
+| **Brightness** | Global LED brightness (0–100%). |
+| **Delay (ms)** | Frame delay in milliseconds — lower values produce faster animations. |
+| **Strip Size** | Number of LEDs on the strip. Changing this requires a reboot. |
+| **Cycle Mode (s)** | Seconds between automatic mode changes. Set to 0 to disable auto-cycling. |
+| **Mode Cycling Selection** | Choose to cycle through all modes or provide a comma-separated list of specific mode indices. |
+
+### Power-save schedule
+The power-save feature lets you dim the LEDs during certain hours (e.g. overnight):
+
+| Setting | Description |
+|---|---|
+| **PS Brightness** | Brightness multiplier during power-save hours (0–100%, applied on top of the global brightness). |
+| **PS Start Hour** | Hour of the day (0–23) when power-save begins. |
+| **PS End Hour** | Hour of the day (0–23) when power-save ends. |
+
+> **Important:** The power-save schedule relies on knowing the current time. This requires an active **WiFi connection to the internet** so the device can sync with an NTP server. You must also set your correct **timezone** on the `/device` page — otherwise the hours will not match your local time.
+
+## Other device configuration
+![Device webpage](img/Device.png)
+
+The device page (`/device`) provides general device settings:
+
+| Setting | Description |
+|---|---|
+| **LED Enabled** | Master on/off toggle for the LED strip. |
+| **Device Name** | A friendly name for the device (stored in EEPROM). |
+| **Timezone** | Select your local timezone from the dropdown. This is used by the NTP time sync and directly affects the power-save schedule described above. Daylight saving time adjustments are handled automatically via POSIX timezone rules. |
+
+The device page also provides a **Reboot** and **Factory Reset** option.
+
+## BOM:
+* LED strip - https://www.amazon.com/dp/B088FKZWDQ
+* LED ring - https://www.amazon.com/dp/B08GPL6N37 
+* ESP32C3 with OLED - https://www.amazon.com/dp/B0F37JWCDW
+* Wireless charger module - https://www.amazon.com/dp/B0BRMMYZR2
+* Magsafe magnets - https://www.amazon.com/dp/B09FZ5Z7S4 
+* 5v stepdown, should work with 5v input too - https://www.amazon.com/dp/B07MS1ND5M 
+* M4 screws 16mm - https://www.amazon.com/dp/B07CK5C5MM (smaller sizes will work too like 12mm, 10mm)
+* M3 screws 6mm - https://www.amazon.com/B01B1OD0IC 
+* Glue - anything that will hold the PLA in place like CA, superglue, E6000, all purpose glue, etc. https://www.amazon.com/dp/B00C32MKLK
