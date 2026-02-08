@@ -7,8 +7,8 @@
 
 #define WIFI        // 2.4Ghz wifi access point
 #define LED         // Individually addressible LED strip
-#define OLED        // OLED display
-#define BUTTONS     // Buttons
+//#define OLED        // OLED display
+//#define BUTTONS     // Buttons
 
 //#define KEYPAD      // Buttons
 //#define RING_LIGHT

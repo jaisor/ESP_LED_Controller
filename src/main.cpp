@@ -53,9 +53,7 @@ void setup() {
 
   device = new CDevice();
   wifiManager = new CWifiManager();
-  #ifdef OLED
   wifiManager->setDevice(device);
-  #endif
 
   ledManager = new CLEDManager();
   ledManager->setModeChangeCallback([]() {

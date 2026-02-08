@@ -14,7 +14,7 @@
 #include "BaseManager.h"
 #include "modes/BaseMode.h"
 
-class CDevice;
+#include "Device.h"
 
 typedef enum {
   WF_CONNECTING = 0,
@@ -65,9 +65,7 @@ private:
 
   bool updateConfigFromJson(JsonDocument jsonObj);
 
-#ifdef OLED
   CDevice *device;
-#endif
 
 public:
 	CWifiManager();
@@ -79,7 +77,5 @@ public:
   void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
   void updateModeChangeTime() { lastModeChangeMs = millis(); }
 
-#ifdef OLED
   void setDevice(CDevice* device) { this->device = device; };
-#endif
 };

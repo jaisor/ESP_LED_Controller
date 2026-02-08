@@ -15,8 +15,19 @@ int height = 40;
 int xOffset = 28; // = (132-w)/2
 int yOffset = 24; // = (64-h)/2
 
+static const char* deviceStateToString(DeviceState state) {
+  switch (state) {
+    case DeviceState::INITIALIZING:    return "INITIALIZING";
+    case DeviceState::WIFI_AP_CREATED:  return "WIFI_AP_CREATED";
+    case DeviceState::WIFI_CONNECTED:   return "WIFI_CONNECTED";
+    case DeviceState::WIFI_OFFLINE:     return "WIFI_OFFLINE";
+    default:                           return "UNKNOWN";
+  }
+}
+
 CDevice::CDevice() {
 
+  _state = DeviceState::INITIALIZING;
   tMillisUp = millis();
 
   #if defined(CONFIG_IDF_TARGET_ESP32C3) && defined(OLED)
@@ -71,6 +82,13 @@ CDevice::CDevice() {
   Log.infoln(F("Device initialized"));
 }
 
+void CDevice::setState(DeviceState state) {
+  if (_state != state) {
+    Log.infoln("Device state: %s -> %s", deviceStateToString(_state), deviceStateToString(state));
+    _state = state;
+  }
+}
+
 CDevice::~CDevice() { 
 #ifdef OLED
   if (virtualCanvas) {
@@ -94,13 +112,12 @@ void CDevice::loop() {
   }
 
   // Update time display once per minute (60000 ms) if not showing temp message
-  if (!showingTempMessage && millis() - lastTimeUpdate >= 60000) {
+  if (_state == DeviceState::WIFI_CONNECTED && !showingTempMessage && millis() - lastTimeUpdate >= 60000) {
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 100)) { // Short timeout to avoid blocking when NTP is unavailable
-      lastTimeUpdate = millis();
+    lastTimeUpdate = millis();
+    virtualCanvas->fillScreen(0);
       
-      // Clear and redraw virtual canvas with current time
-      virtualCanvas->fillScreen(0);
+    if (getLocalTime(&timeinfo, 100)) { // Short timeout to avoid blocking when NTP is unavailable  
       virtualCanvas->setTextColor(1); // White text
       virtualCanvas->setTextSize(2);
       
@@ -116,10 +133,11 @@ void CDevice::loop() {
       virtualCanvas->print(timeStr);
       virtualCanvas->setCursor(72 / 2 - 16, 16);
       virtualCanvas->print((timeinfo.tm_hour >= 12) ? "PM" : "AM");
-      
-      // Update content bounds after drawing
-      updateContentBounds();
+    } else {
+      Log.warningln("Failed to get local time for display update");
     }
+    // Update content bounds after drawing
+    updateContentBounds();
   }
   
   // Update scroll position every 50ms

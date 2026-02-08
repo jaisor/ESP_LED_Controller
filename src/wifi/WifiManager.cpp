@@ -74,7 +74,7 @@ const char* getTzString(long gmtOffset_sec) {
 }
 
 CWifiManager::CWifiManager()
-:rebootNeeded(false), wifiRetries(0) {
+:rebootNeeded(false), wifiRetries(0), device(nullptr) {
 
   deviceJson["dev_name"] = configuration.name;
   deviceJson["version"] = VERSION;
@@ -267,6 +267,9 @@ void CWifiManager::loop() {
 
     if (status != WF_LISTENING) {  
       // Start listening for requests
+      if (device) {
+        device->setState(isApMode() ? DeviceState::WIFI_AP_CREATED : DeviceState::WIFI_CONNECTED);
+      }
       listen();
       return;
     }
@@ -319,6 +322,9 @@ void CWifiManager::loop() {
     }
   } else {
     // WiFi is down
+    if (device) {
+      device->setState(DeviceState::WIFI_OFFLINE);
+    }
     switch (status) {
       case WF_LISTENING: {
       Log.infoln("Disconnecting %i", status);
