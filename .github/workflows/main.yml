@@ -3,6 +3,7 @@ name: PlatformIO CI
 on:
   push:
     branches: [led_headphone_stand, led_right_light, led_cell]
+    tags: [ 'v*.*.*' ]
 
 jobs:
   build:
