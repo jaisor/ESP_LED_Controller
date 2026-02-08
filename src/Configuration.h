@@ -15,9 +15,6 @@
 
 //#define DEBUG_MOCK_HP
 //#define DISABLE_LOGGING
-#ifndef DISABLE_LOGGING
-  #define LOG_LEVEL LOG_LEVEL_VERBOSE
-#endif
 
 #define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
 #ifdef WEB_LOGGING

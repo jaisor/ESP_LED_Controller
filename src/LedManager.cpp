@@ -13,6 +13,7 @@
 #include "modes/ChargingMode.h"
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
+#include "modes/SegmentTestMode.h"
 
 const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
 {
@@ -112,7 +113,7 @@ const TProgmemRGBPalette16 Christmas_p FL_PROGMEM =
 };
 
 CLEDManager::CLEDManager()
-: leds(nullptr), chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
+: leds(nullptr), virtualLeds(nullptr), virtualSize(0), chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
 
 CLEDManager::~CLEDManager() {
   for (auto *mode : modes) {
@@ -125,6 +126,9 @@ CLEDManager::~CLEDManager() {
 
   delete[] leds;
   leds = nullptr;
+
+  delete[] virtualLeds;
+  virtualLeds = nullptr;
 }
 
 void CLEDManager::setup() {
@@ -136,12 +140,24 @@ void CLEDManager::setup() {
   leds = new CRGB[configuration.ledStripSize];
   initFastLED();
 
+  // Virtual array: modes render here, then we map to hardware
+  virtualSize = (configuration.ledStripSize > SEG_BOTTOM_RING_SIZE)
+    ? configuration.ledStripSize - SEG_BOTTOM_RING_SIZE
+    : configuration.ledStripSize;
+  virtualLeds = new CRGB[virtualSize];
+  Log.infoln("LED segments: bottom_ring[0..%d], wall_ring[%d..%d], vertical_arm[%d..%d], top_arm[%d..%d]",
+    SEG_BOTTOM_RING_SIZE - 1,
+    SEG_BOTTOM_RING_SIZE, SEG_WALL_RING_END - 1,
+    SEG_WALL_RING_END, SEG_VERTICAL_ARM_END - 1,
+    SEG_VERTICAL_ARM_END, configuration.ledStripSize - 1);
+  Log.infoln("Virtual LED array size: %d (hardware: %d)", virtualSize, configuration.ledStripSize);
+
   Log.infoln("LED Type configured: %d", configuration.ledType);
   FastLED.setBrightness(255);
   CONFIG_getLedBrightness(true);
 
   registerModes();
-  chargingMode = new CChargingMode(configuration.ledStripSize, "Charging");
+  chargingMode = new CChargingMode(virtualSize, "Charging");
 
   tsCycleMs = millis();
 }
@@ -187,20 +203,22 @@ void CLEDManager::initFastLED() {
 }
 
 void CLEDManager::registerModes() {
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
+  //modes.push_back(new CSegmentTestMode(virtualSize, "Segment Test"));
   //
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CPaletteMode(virtualSize, "Party Colors", PartyColors_p, 255.0 / (float)virtualSize));
   //
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Cloud Colors", CloudColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CHalfwayPaletteMode(virtualSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)virtualSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(virtualSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)virtualSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(virtualSize, "Halfway Party", PartyColors_p, 255.0 / ((float)virtualSize / 2.0)));
   //
-  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  modes.push_back(new CPaletteMode(virtualSize, "Heat Colors", HeatColors_p, 255.0 / (float)virtualSize));
+  modes.push_back(new CPaletteMode(virtualSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)virtualSize));
+  modes.push_back(new CPaletteMode(virtualSize, "Cloud Colors", CloudColors_p, 255.0 / (float)virtualSize));
+  modes.push_back(new CPaletteMode(virtualSize, "Forest Colors", ForestColors_p, 255.0 / (float)virtualSize));
+  modes.push_back(new CPaletteMode(virtualSize, "Ocean Colors", OceanColors_p, 255.0 / (float)virtualSize));
+  modes.push_back(new CPaletteMode(virtualSize, "Lava Colors", LavaColors_p, 255.0 / (float)virtualSize));
+  //
+  modes.push_back(new CWhiteLightMode(virtualSize, "White Light"));
 }
 
 void CLEDManager::handleChargingInput() {
@@ -226,7 +244,8 @@ void CLEDManager::renderCurrentMode() {
     return;
   }
 
-  modes[configuration.ledMode]->draw(leds);
+  modes[configuration.ledMode]->draw(virtualLeds);
+  copyVirtualToHardware();
   FastLED.show(255 * CONFIG_getLedBrightness());
 }
 
@@ -235,8 +254,33 @@ void CLEDManager::renderChargingMode() {
     return;
   }
 
-  chargingMode->draw(leds);
+  chargingMode->draw(virtualLeds);
+  copyVirtualToHardware();
   FastLED.show(255 * CONFIG_getLedBrightness());
+}
+
+void CLEDManager::copyVirtualToHardware() {
+  uint16_t hwSize = configuration.ledStripSize;
+  uint16_t wallRingSize = (SEG_WALL_RING_END > SEG_BOTTOM_RING_SIZE) ? (SEG_WALL_RING_END - SEG_BOTTOM_RING_SIZE) : 0;
+
+  // virtualLeds[0..wallRingSize-1] → bottom_ring AND wall_ring (mirrored)
+  uint16_t mirrorCount = min(wallRingSize, virtualSize);
+  // Copy to bottom_ring: leds[0..SEG_BOTTOM_RING_SIZE-1]
+  uint16_t bottomCount = min((uint16_t)SEG_BOTTOM_RING_SIZE, min(hwSize, mirrorCount));
+  memcpy(leds, virtualLeds, bottomCount * sizeof(CRGB));
+  // Copy same data to wall_ring: leds[SEG_BOTTOM_RING_SIZE..SEG_WALL_RING_END-1]
+  if (hwSize > SEG_BOTTOM_RING_SIZE) {
+    uint16_t wallCount = min(wallRingSize, (uint16_t)(hwSize - SEG_BOTTOM_RING_SIZE));
+    memcpy(leds + SEG_BOTTOM_RING_SIZE, virtualLeds, wallCount * sizeof(CRGB));
+  }
+
+  // virtualLeds[wallRingSize..] → vertical_arm then top_arm (sequential)
+  if (virtualSize > mirrorCount && hwSize > SEG_WALL_RING_END) {
+    uint16_t remaining = virtualSize - mirrorCount;
+    uint16_t hwRemaining = hwSize - SEG_WALL_RING_END;
+    uint16_t copyCount = min(remaining, hwRemaining);
+    memcpy(leds + SEG_WALL_RING_END, virtualLeds + mirrorCount, copyCount * sizeof(CRGB));
+  }
 }
 
 void CLEDManager::updateModeCycling() {

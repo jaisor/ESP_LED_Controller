@@ -8,6 +8,12 @@
 #include "Configuration.h"
 #include "modes/BaseMode.h"
 
+// LED strip segment boundary indices
+#define SEG_BOTTOM_RING_SIZE  35
+#define SEG_WALL_RING_END     69
+#define SEG_VERTICAL_ARM_END  90
+// top_arm runs from SEG_VERTICAL_ARM_END to ledStripSize
+
 class CLEDManager {
 
 public:
@@ -28,8 +34,12 @@ private:
   void renderCurrentMode();
   void renderChargingMode();
   void updateModeCycling();
+  void copyVirtualToHardware();
   
-  CRGB *leds;
+  CRGB *leds;           // Hardware LED array (ledStripSize)
+  CRGB *virtualLeds;    // Virtual LED array (ledStripSize - SEG_BOTTOM_RING_SIZE)
+  uint16_t virtualSize; // Size of the virtual array
+
   std::vector<CBaseMode*> modes;
   CBaseMode *chargingMode;
 
