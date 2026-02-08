@@ -24,7 +24,6 @@ public:
 private:
   void initFastLED();
   void registerModes();
-  void handleModeBounds();
   void handleChargingInput();
   void renderCurrentMode();
   void renderChargingMode();

@@ -90,12 +90,11 @@ void loop() {
   
   device->loop();
   wifiManager->loop();
+  ledManager->loop();
 
   if (wifiManager->isRebootNeeded()) {
     return;
   }
-
-  ledManager->loop();
 
   delay(5);
   yield();

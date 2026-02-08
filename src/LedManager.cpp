@@ -147,7 +147,15 @@ void CLEDManager::setup() {
 }
 
 void CLEDManager::loop() {
-  handleModeBounds();
+
+  if (modes.empty()) {
+    configuration.ledMode = 0;
+    return;
+  }
+
+  if (configuration.ledMode > modes.size() - 1) {
+    configuration.ledMode = 0;
+  }
   handleChargingInput();
 
   if (isCharging) {
@@ -193,17 +201,6 @@ void CLEDManager::registerModes() {
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
   //
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
-}
-
-void CLEDManager::handleModeBounds() {
-  if (modes.empty()) {
-    configuration.ledMode = 0;
-    return;
-  }
-
-  if (configuration.ledMode > modes.size() - 1) {
-    configuration.ledMode = 0;
-  }
 }
 
 void CLEDManager::handleChargingInput() {
