@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build (esp32c3)",
+			"type": "shell",
+			"command": "C:\\Users\\jaiso\\.platformio\\penv\\Scripts\\platformio.exe run --environment esp32c3"
+		}
+	]
+}

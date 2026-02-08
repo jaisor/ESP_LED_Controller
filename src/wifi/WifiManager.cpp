@@ -44,33 +44,66 @@ int dBmtoPercentage(int dBm) {
   return quality;
 }
 
+// Timezone table: { gmtOffset_sec, POSIX TZ string, human-readable label }
+struct TimezoneEntry {
+  long offset;
+  const char* posix;
+  const char* label;
+};
+
+static const TimezoneEntry timezones[] PROGMEM = {
+  { -43200, "UTC12",                              "(UTC-12:00) Baker Island" },
+  { -39600, "SST11",                               "(UTC-11:00) American Samoa" },
+  { -36000, "HST10",                                "(UTC-10:00) Hawaii" },
+  { -32400, "AKST9AKDT,M3.2.0,M11.1.0",            "(UTC-09:00) Alaska" },
+  { -28800, "PST8PDT,M3.2.0,M11.1.0",              "(UTC-08:00) Pacific Time (US & Canada)" },
+  { -25200, "MST7MDT,M3.2.0,M11.1.0",              "(UTC-07:00) Mountain Time (US & Canada)" },
+  { -21600, "CST6CDT,M3.2.0,M11.1.0",              "(UTC-06:00) Central Time (US & Canada)" },
+  { -18000, "EST5EDT,M3.2.0,M11.1.0",              "(UTC-05:00) Eastern Time (US & Canada)" },
+  { -14400, "AST4ADT,M3.2.0,M11.1.0",              "(UTC-04:00) Atlantic Time (Canada)" },
+  { -12600, "NST3:30NDT,M3.2.0,M11.1.0",           "(UTC-03:30) Newfoundland" },
+  { -10800, "BRT3",                                 "(UTC-03:00) Buenos Aires, Brasilia" },
+  {  -7200, "FNT2",                                 "(UTC-02:00) Mid-Atlantic" },
+  {  -3600, "AZOT1AZOST,M3.5.0/0,M10.5.0/1",       "(UTC-01:00) Azores" },
+  {      0, "GMT0",                                 "(UTC+00:00) GMT / London, Dublin" },
+  {   3600, "CET-1CEST,M3.5.0,M10.5.0/3",          "(UTC+01:00) Central European Time" },
+  {   7200, "EET-2EEST,M3.5.0/3,M10.5.0/4",        "(UTC+02:00) Eastern European Time" },
+  {  10800, "MSK-3",                                "(UTC+03:00) Moscow, Istanbul" },
+  {  12600, "IRST-3:30IRDT,J79/24,J263/24",         "(UTC+03:30) Tehran" },
+  {  14400, "GST-4",                                "(UTC+04:00) Dubai, Baku" },
+  {  16200, "AFT-4:30",                             "(UTC+04:30) Kabul" },
+  {  18000, "PKT-5",                                "(UTC+05:00) Karachi, Tashkent" },
+  {  19800, "IST-5:30",                             "(UTC+05:30) Mumbai, New Delhi" },
+  {  20700, "NPT-5:45",                             "(UTC+05:45) Kathmandu" },
+  {  21600, "BST-6",                                "(UTC+06:00) Dhaka, Almaty" },
+  {  23400, "MMT-6:30",                             "(UTC+06:30) Yangon" },
+  {  25200, "ICT-7",                                "(UTC+07:00) Bangkok, Jakarta" },
+  {  28800, "CST-8",                                "(UTC+08:00) Beijing, Singapore, Perth" },
+  {  32400, "JST-9",                                "(UTC+09:00) Tokyo, Seoul" },
+  {  34200, "ACST-9:30ACDT,M10.1.0,M4.1.0/3",      "(UTC+09:30) Adelaide, Darwin" },
+  {  36000, "AEST-10AEDT,M10.1.0,M4.1.0/3",        "(UTC+10:00) Sydney, Melbourne" },
+  {  39600, "SBT-11",                               "(UTC+11:00) Solomon Islands" },
+  {  43200, "NZST-12NZDT,M9.5.0,M4.1.0/3",         "(UTC+12:00) Auckland, Fiji" },
+  {  46800, "TOT-13",                               "(UTC+13:00) Tonga, Samoa" },
+};
+
+static const int TIMEZONE_COUNT = sizeof(timezones) / sizeof(timezones[0]);
+
 /**
  * Get POSIX timezone string for automatic DST handling
- * Maps GMT offset (in seconds) to timezone string
- * POSIX format: STD offset [DST [offset],start[/time],end[/time]]
- * DST transitions: M3.2.0 = 2nd Sunday of March, M11.1.0 = 1st Sunday of November
+ * Looks up offset in timezone table, falls back to UTC+/-N
  */
 const char* getTzString(long gmtOffset_sec) {
-  int hours = gmtOffset_sec / 3600;
-  
-  // Map common US timezones with DST support
-  switch(hours) {
-    case -8: return "PST8PDT,M3.2.0,M11.1.0";     // Pacific Time (US West Coast)
-    case -7: return "MST7MDT,M3.2.0,M11.1.0";     // Mountain Time (US)
-    case -6: return "CST6CDT,M3.2.0,M11.1.0";     // Central Time (US)
-    case -5: return "EST5EDT,M3.2.0,M11.1.0";     // Eastern Time (US)
-    case -10: return "HST10HDT,M3.2.0,M11.1.0";   // Hawaii-Aleutian Time
-    case -9: return "AKST9AKDT,M3.2.0,M11.1.0";   // Alaska Time
-    case 0: return "GMT0BST,M3.5.0/1,M10.5.0";    // UK (BST transitions)
-    case 1: return "CET-1CEST,M3.5.0,M10.5.0/3";  // Central Europe
-    case 2: return "EET-2EEST,M3.5.0/3,M10.5.0/4"; // Eastern Europe
-    default: {
-      // For other timezones, create a simple string without DST
-      static char tzStr[16];
-      snprintf(tzStr, sizeof(tzStr), "UTC%+d", -hours);
-      return tzStr;
+  for (int i = 0; i < TIMEZONE_COUNT; i++) {
+    if (timezones[i].offset == gmtOffset_sec) {
+      return timezones[i].posix;
     }
   }
+  // Fallback for offsets not in the table
+  static char tzStr[16];
+  int hours = gmtOffset_sec / 3600;
+  snprintf(tzStr, sizeof(tzStr), "UTC%+d", -hours);
+  return tzStr;
 }
 
 CWifiManager::CWifiManager()
@@ -527,6 +560,17 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
     Log.infoln("Device req name: %s", deviceName);
     Log.infoln("Device size %i name: %s", sizeof(configuration.name), configuration.name);
 
+    if (request->hasArg("timezone")) {
+      long newOffset = atol(request->arg("timezone").c_str());
+      if (newOffset != configuration.gmtOffset_sec) {
+        configuration.gmtOffset_sec = newOffset;
+        Log.infoln("Timezone offset set to: %l", configuration.gmtOffset_sec);
+        // Reconfigure NTP with new timezone
+        const char* tz = getTzString(configuration.gmtOffset_sec);
+        configTzTime(tz, configuration.ntpServer);
+      }
+    }
+
     EEPROM_saveConfig();
     
     request->redirect("device");
@@ -534,9 +578,23 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
     rebootNeeded = true;
   } else {
 
+    // Build timezone dropdown options
+    String tzOptions;
+    for (int i = 0; i < TIMEZONE_COUNT; i++) {
+      tzOptions += "<option value='";
+      tzOptions += timezones[i].offset;
+      tzOptions += "'";
+      if (timezones[i].offset == configuration.gmtOffset_sec) {
+        tzOptions += " selected";
+      }
+      tzOptions += ">";
+      tzOptions += timezones[i].label;
+      tzOptions += "</option>";
+    }
+
     AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8");
     printHTMLTop(response);
-    response->printf_P(htmlDevice, configuration.ledEnabled ? "checked" : "", configuration.name);
+    response->printf_P(htmlDevice, configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str());
     printHTMLBottom(response);
     request->send(response);
   }
@@ -772,9 +830,21 @@ void CWifiManager::printHTMLMain(Print *p) {
     }
   }
 
+  // Get current local time if WiFi connected
+  String currentTimeStr = "";
+  if (device && device->getState() == DeviceState::WIFI_CONNECTED) {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo, 100)) {
+      char timeBuf[64];
+      strftime(timeBuf, sizeof(timeBuf), "%A, %B %d %Y %I:%M %p", &timeinfo);
+      currentTimeStr = String("<p>\xF0\x9F\x95\x92 Current local time: <b>") + String(timeBuf) + String("</b></p>");
+    }
+  }
+  
   p->printf_P(htmlMain, 
     currentModeName.c_str(),
     timeRemaining.c_str(),
+    currentTimeStr.c_str(),
     configuration.ledStripSize,
     typeOptions.c_str(),
     modeOptions.c_str(), 
@@ -785,7 +855,7 @@ void CWifiManager::printHTMLMain(Print *p) {
     cycleModesListStr.c_str(),
     configuration.cycleModesCount == 0 ? "disabled" : "",
     availableModesStr.c_str(),
-    configuration.psLedBrightness * 100, configuration.psLedBrightness * 100, 
+    configuration.psLedBrightness * 100.0, configuration.psLedBrightness * 100.0, 
     configuration.psStartHour, 
     configuration.psEndHour
   );

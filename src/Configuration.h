@@ -27,7 +27,7 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32C3
   #define SERIAL_MONITOR_BAUD 460800
-  #define DISABLE_LOGGING // Xiao's setup with USB requires serial to be initialized on the IDE else it blocks
+  //#define DISABLE_LOGGING // Xiao's setup with USB requires serial to be initialized on the IDE else it blocks
 #else
   #define SERIAL_MONITOR_BAUD 115200
 #endif
@@ -62,7 +62,7 @@
     #define WIFI_FALLBACK_PASS "password123"
 
     #define NTP_SERVER "pool.ntp.org"
-    #define NTP_GMT_OFFSET_SEC -28800  // Pacific Standard Time (UTC-8), DST handled automatically
+    #define NTP_GMT_OFFSET_SEC 0  // GMT (default on factory reset)
     #define NTP_DAYLIGHT_OFFSET_SEC 0  // Deprecated, kept for compatibility
 
     // Web server

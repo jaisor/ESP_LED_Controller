@@ -111,6 +111,7 @@ const char htmlWifi[] PROGMEM = R"=====(
 const char htmlMain[] PROGMEM = R"=====(
       <h3>LED Settings</h3>
       <p><b>Current Mode:</b> %s <br/> <b>Next change:</b> %s</p>
+      %s
       <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
           <label>
@@ -195,6 +196,13 @@ const char htmlDevice[] PROGMEM = R"=====(
           <label>
             Device name
             <input type='text' id='deviceName' name='deviceName' value='%s'>
+          </label>
+          <br/>
+          <label>
+            Timezone
+            <select name='timezone' id='timezone'>
+              %s
+            </select>
           </label>
         </fieldset>
         <button type='submit' value='Submit'>Submit...</button>
