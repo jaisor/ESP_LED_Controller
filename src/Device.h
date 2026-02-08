@@ -23,7 +23,7 @@ class CDevice {
 
 public:
 	CDevice();
-  ~CDevice();
+  virtual ~CDevice();
   void loop();
 
   DeviceState getState() const { return _state; }

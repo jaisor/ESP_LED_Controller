@@ -40,17 +40,33 @@
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
   #define INTERNAL_LED_PIN GPIO_NUM_8
   #define DEVICE_NAME "ESP32C3LED"
+  #ifdef BUTTONS
+    #define BUTTON_1_PIN     GPIO_NUM_0
+    #define BUTTON_2_PIN     GPIO_NUM_1
+  #endif
 #elif defined(SEEED_XIAO_M0)
   #define INTERNAL_LED_PIN     13
 #elif defined(CONFIG_IDF_TARGET_ESP32)
   #define INTERNAL_LED_PIN LED_BUILTIN
   #define DEVICE_NAME "ESP32LED"
+  #ifdef BUTTONS
+    #define BUTTON_1_PIN     GPIO_NUM_0
+    #define BUTTON_2_PIN     GPIO_NUM_1
+  #endif
 #elif defined(ESP8266)
   #define INTERNAL_LED_PIN LED_BUILTIN
   #define DEVICE_NAME "ESP8266LED"
+  #ifdef BUTTONS
+    #define BUTTON_1_PIN     D0
+    #define BUTTON_2_PIN     D1
+  #endif
 #else
   #define INTERNAL_LED_PIN LED_BUILTIN
   #define DEVICE_NAME "ESPXXLED"
+  #ifdef BUTTONS
+    #define BUTTON_1_PIN     0
+    #define BUTTON_2_PIN     1
+  #endif
 #endif
 
 #ifdef WIFI
@@ -87,16 +103,11 @@
         #define LED_STRIP_SIZE 267
         #define OUTTER_RING_SIZE 141
     #else
-        #define LED_STRIP_SIZE 90  
+        #define LED_STRIP_SIZE 103  
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly
     #define LED_COLOR_ORDER GRB
-#endif
-
-#ifdef BUTTONS
-  #define BUTTON_1_PIN     GPIO_NUM_0
-  #define BUTTON_2_PIN     GPIO_NUM_1
 #endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32C3)
