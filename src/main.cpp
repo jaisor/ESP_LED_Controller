@@ -52,8 +52,11 @@ void setup() {
   intLEDOn();
 
   device = new CDevice();
+  device->setBootProgress(20);
+
   wifiManager = new CWifiManager();
   wifiManager->setDevice(device);
+  device->setBootProgress(50);
 
   ledManager = new CLEDManager();
   ledManager->setModeChangeCallback([]() {
@@ -69,10 +72,12 @@ void setup() {
     #endif
   });
   ledManager->setup();
+  device->setBootProgress(80);
 
   wifiManager->setModes(ledManager->getModes());
   wifiManager->updateModeChangeTime();
 
+  device->setBootProgress(100);
   Log.noticeln("Setup completed!");
 }
 

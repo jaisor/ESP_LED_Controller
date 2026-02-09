@@ -260,9 +260,9 @@ void CWifiManager::listen() {
   #ifdef OLED
   if (device) {
     if (isApMode()) {
-      //device->displayApInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
+      device->setWifiAPInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
     } else {
-      //device->displayWifiInfo(SSID, WiFi.localIP().toString().c_str());
+      device->setWifiConnectedInfo(WiFi.localIP().toString().c_str());
     }
   }
   #endif
@@ -301,6 +301,11 @@ void CWifiManager::loop() {
     if (status != WF_LISTENING) {  
       // Start listening for requests
       if (device) {
+        if (isApMode()) {
+          device->setWifiAPInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
+        } else {
+          device->setWifiConnectedInfo(WiFi.localIP().toString().c_str());
+        }
         device->setState(isApMode() ? DeviceState::WIFI_AP_CREATED : DeviceState::WIFI_CONNECTED);
       }
       listen();

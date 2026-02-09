@@ -67,7 +67,7 @@ const char htmlBottom[] PROGMEM = R"=====(
     </main>
     <footer class="container">
       <small>Version %s</small>
-      <small><a href="https://github.com/jaisor/ESP_LED_Controller">https://github.com/jaisor/ESP_LED_Controller</a>
+      <small><a href="https://github.com/jaisor/ESP_LED_Controller/tree/led_headphone_stand">https://github.com/jaisor/ESP_LED_Controller/tree/led_headphone_stand</a>
       <small hidden="true">%s</small>
     </footer>
   </body>

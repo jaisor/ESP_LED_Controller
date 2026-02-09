@@ -54,7 +54,7 @@ CDevice::CDevice() {
     
     virtualCanvas->setTextSize(1);
     virtualCanvas->setCursor(0, 10);
-    virtualCanvas->print("Init...");
+    virtualCanvas->print("Starting up");
     
     // Initialize scrolling
     scrollOffset = 0;
@@ -68,6 +68,13 @@ CDevice::CDevice() {
     showingTempMessage = false;
     tempMessageEndTime = 0;
     
+    // Boot progress
+    bootProgress = 0;
+
+    // WiFi connected banner
+    wifiConnectedShownAt = 0;
+    wifiConnectedBannerDone = false;
+    
     // Calculate content bounds
     updateContentBounds();
     
@@ -75,6 +82,7 @@ CDevice::CDevice() {
     displayToggleState = false;
     wifiConnected = false;
     strcpy(wifiSSID, "");
+    strcpy(wifiPass, "");
     strcpy(wifiIP, "");
   #endif
 
@@ -86,7 +94,39 @@ void CDevice::setState(DeviceState state) {
   if (_state != state) {
     Log.infoln("Device state: %s -> %s", deviceStateToString(_state), deviceStateToString(state));
     _state = state;
+    #ifdef OLED
+    if (state == DeviceState::WIFI_CONNECTED) {
+      wifiConnectedShownAt = millis();
+      wifiConnectedBannerDone = false;
+      lastTimeUpdate = 0; // Force time update after banner
+    }
+    #endif
   }
+}
+
+void CDevice::setBootProgress(uint8_t percent) {
+  #ifdef OLED
+  if (percent > 100) percent = 100;
+  bootProgress = percent;
+  #endif
+}
+
+void CDevice::setWifiAPInfo(const char* ssid, const char* password, const char* ip) {
+  #ifdef OLED
+  strncpy(wifiSSID, ssid, sizeof(wifiSSID) - 1);
+  wifiSSID[sizeof(wifiSSID) - 1] = '\0';
+  strncpy(wifiPass, password, sizeof(wifiPass) - 1);
+  wifiPass[sizeof(wifiPass) - 1] = '\0';
+  strncpy(wifiIP, ip, sizeof(wifiIP) - 1);
+  wifiIP[sizeof(wifiIP) - 1] = '\0';
+  #endif
+}
+
+void CDevice::setWifiConnectedInfo(const char* ip) {
+  #ifdef OLED
+  strncpy(wifiIP, ip, sizeof(wifiIP) - 1);
+  wifiIP[sizeof(wifiIP) - 1] = '\0';
+  #endif
 }
 
 CDevice::~CDevice() { 
@@ -108,36 +148,24 @@ void CDevice::loop() {
   // Check if temporary message has expired
   if (showingTempMessage && millis() >= tempMessageEndTime) {
     showingTempMessage = false;
-    lastTimeUpdate = 0; // Force time update
+    lastTimeUpdate = 0; // Force time update after temp message
   }
 
-  // Update time display once per minute (60000 ms) if not showing temp message
-  if (_state == DeviceState::WIFI_CONNECTED && !showingTempMessage && millis() - lastTimeUpdate >= 60000) {
-    struct tm timeinfo;
-    lastTimeUpdate = millis();
-    virtualCanvas->fillScreen(0);
-      
-    if (getLocalTime(&timeinfo, 100)) { // Short timeout to avoid blocking when NTP is unavailable  
-      virtualCanvas->setTextColor(1); // White text
-      virtualCanvas->setTextSize(2);
-      
-      // Format time as HH:MM AM/PM
-      int hour12 = timeinfo.tm_hour % 12;
-      if (hour12 == 0) hour12 = 12; // Convert 0 to 12 for 12-hour format
-      
-      char timeStr[16];
-      snprintf(timeStr, sizeof(timeStr), "%02d:%02d", hour12, timeinfo.tm_min);
-      int16_t textWidth = strlen(timeStr) * 12;
-      
-      virtualCanvas->setCursor((72 - textWidth) / 2, 0);
-      virtualCanvas->print(timeStr);
-      virtualCanvas->setCursor(72 / 2 - 16, 16);
-      virtualCanvas->print((timeinfo.tm_hour >= 12) ? "PM" : "AM");
-    } else {
-      Log.warningln("Failed to get local time for display update");
+  // State-based rendering (only when not showing a temporary message)
+  if (!showingTempMessage) {
+    switch (_state) {
+      case DeviceState::INITIALIZING:
+        drawInitializing();
+        break;
+      case DeviceState::WIFI_AP_CREATED:
+        drawWifiAP();
+        break;
+      case DeviceState::WIFI_CONNECTED:
+        drawWifiConnected();
+        break;
+      default:
+        break;
     }
-    // Update content bounds after drawing
-    updateContentBounds();
   }
   
   // Update scroll position every 50ms
@@ -255,6 +283,138 @@ void CDevice::displayTemporaryMessage(const char* message, unsigned long duratio
   // Set temp message tracking
   showingTempMessage = true;
   tempMessageEndTime = millis() + durationMs;
+  #endif
+}
+
+void CDevice::drawInitializing() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+
+  virtualCanvas->fillScreen(0);
+  virtualCanvas->setTextColor(1);
+  virtualCanvas->setTextSize(1); // 6x8 font
+
+  // "Starting up" centered
+  const char* msg = "Starting up";
+  int16_t textWidth = strlen(msg) * 6;
+  virtualCanvas->setCursor((OLED_SCREEN_WIDTH - textWidth) / 2, 4);
+  virtualCanvas->print(msg);
+
+  // Progress bar: 4px padding each side, 2px below text
+  int16_t barX = 4;
+  int16_t barY = 18;
+  int16_t barW = OLED_SCREEN_WIDTH - 8;
+  int16_t barH = 10;
+
+  // Outline
+  virtualCanvas->drawRect(barX, barY, barW, barH, 1);
+
+  // Filled portion
+  int16_t fillW = (int16_t)((barW - 2) * bootProgress / 100);
+  if (fillW > 0) {
+    virtualCanvas->fillRect(barX + 1, barY + 1, fillW, barH - 2, 1);
+  }
+
+  updateContentBounds();
+  #endif
+}
+
+void CDevice::drawWifiAP() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+
+  virtualCanvas->fillScreen(0);
+  virtualCanvas->setTextColor(1);
+  virtualCanvas->setTextSize(1); // Smallest font (6x8)
+
+  // Line 1: "WiFi Created"
+  
+
+  // Line 2: SSID
+  virtualCanvas->setCursor(0, 9);
+  virtualCanvas->print(wifiSSID);
+
+  // Line 3: Password
+  virtualCanvas->setCursor(0, 18);
+  virtualCanvas->print(wifiPass);
+
+  // Line 4: IP address
+  virtualCanvas->setCursor(0, 27);
+  virtualCanvas->print(wifiIP);
+
+  updateContentBounds();
+  #endif
+}
+
+void CDevice::drawWifiConnected() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+
+  // Show "WiFi connected" + IP for 10 seconds, then switch to time
+  if (!wifiConnectedBannerDone && millis() - wifiConnectedShownAt < 10000) {
+    virtualCanvas->fillScreen(0);
+    virtualCanvas->setTextColor(1);
+    virtualCanvas->setTextSize(1);
+
+    const char* msg = "WiFi connected";
+    virtualCanvas->setCursor(0, 0);
+    virtualCanvas->print(msg);
+
+    virtualCanvas->setCursor(0, 9);
+    virtualCanvas->print(wifiIP);
+
+    virtualCanvas->setCursor(0, 18);
+    virtualCanvas->print("Web server ready");
+
+    updateContentBounds();
+  } else {
+    if (!wifiConnectedBannerDone) {
+      wifiConnectedBannerDone = true;
+      lastTimeUpdate = 0; // Force immediate time draw
+    }
+    drawTime();
+  }
+  #endif
+}
+
+void CDevice::drawTime() {
+  #ifdef CONFIG_IDF_TARGET_ESP32C3
+  if (!virtualCanvas) return;
+
+  // Update once per minute
+  if (millis() - lastTimeUpdate < 60000) return;
+  lastTimeUpdate = millis();
+
+  virtualCanvas->fillScreen(0);
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo, 100)) {
+    virtualCanvas->setTextColor(1);
+    virtualCanvas->setTextSize(2); // Large font for time
+
+    int hour12 = timeinfo.tm_hour % 12;
+    if (hour12 == 0) hour12 = 12;
+
+    char timeStr[16];
+    snprintf(timeStr, sizeof(timeStr), "%02d:%02d", hour12, timeinfo.tm_min);
+    int16_t textWidth = strlen(timeStr) * 12; // textSize 2 = 12px per char
+
+    virtualCanvas->setCursor((OLED_SCREEN_WIDTH - textWidth) / 2, 0);
+    virtualCanvas->print(timeStr);
+
+    // AM/PM below
+    const char* ampm = (timeinfo.tm_hour >= 12) ? "PM" : "AM";
+    int16_t ampmWidth = strlen(ampm) * 12;
+    virtualCanvas->setCursor((OLED_SCREEN_WIDTH - ampmWidth) / 2, 20);
+    virtualCanvas->print(ampm);
+  } else {
+    virtualCanvas->setTextColor(1);
+    virtualCanvas->setTextSize(1);
+    virtualCanvas->setCursor(0, 10);
+    virtualCanvas->print("Time N/A");
+  }
+
+  updateContentBounds();
   #endif
 }
 #endif

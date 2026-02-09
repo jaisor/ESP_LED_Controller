@@ -28,6 +28,11 @@ public:
 
   DeviceState getState() const { return _state; }
   void setState(DeviceState state);
+  void setBootProgress(uint8_t percent); // 0-100
+
+  // Set WiFi info for OLED display (call before setState)
+  void setWifiAPInfo(const char* ssid, const char* password, const char* ip);
+  void setWifiConnectedInfo(const char* ip);
 
   #ifdef OLED
   Adafruit_SSD1306 *_display;
@@ -45,9 +50,17 @@ private:
   #ifdef OLED
     unsigned long tMillisDisplayToggle;
     bool displayToggleState;
-    char wifiSSID[32];
+    char wifiSSID[64];
+    char wifiPass[64];
     char wifiIP[32];
     bool wifiConnected;
+    
+    // Boot progress bar
+    uint8_t bootProgress; // 0-100
+
+    // WiFi connected display timing
+    unsigned long wifiConnectedShownAt;
+    bool wifiConnectedBannerDone;
     
     // Virtual screen scrolling
     int16_t scrollOffset;
@@ -65,5 +78,10 @@ private:
     static const int16_t HARDWARE_X_OFFSET = 28;
     static const int16_t HARDWARE_Y_OFFSET = 24;
     static const unsigned long SCROLL_PAUSE_MS = 500;
+
+    void drawInitializing();
+    void drawWifiAP();
+    void drawWifiConnected();
+    void drawTime();
   #endif
 };
