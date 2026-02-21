@@ -14,12 +14,12 @@
 //#define RING_LIGHT
 
 //#define DEBUG_MOCK_HP
-//#define DISABLE_LOGGING
+#define DISABLE_LOGGING
 #ifndef DISABLE_LOGGING
   #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
-#define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
+//#define WEB_LOGGING // When enabled log is available at http://<device_ip>/log
 #ifdef WEB_LOGGING
   #define WEB_LOG_LEVEL LOG_LEVEL_VERBOSE
   #define WEB_LOG_MAX_SIZE 8192  // Cap log buffer to 8KB to prevent heap exhaustion
@@ -87,7 +87,7 @@
         #define LED_STRIP_SIZE 267
         #define OUTTER_RING_SIZE 141
     #else
-        #define LED_STRIP_SIZE 90  
+        #define LED_STRIP_SIZE 89  
         #define OUTTER_RING_SIZE 240
     #endif
     #define LED_BRIGHTNESS 1  // 0-1, 1-max brightness, make sure your LEDs are powered accordingly

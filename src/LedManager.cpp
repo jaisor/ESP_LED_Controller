@@ -88,6 +88,29 @@ const TProgmemRGBPalette16 Pride_p FL_PROGMEM =
     0xFF0018,   // Vivid Red
 };
 
+const TProgmemRGBPalette16 StrangerThings_p FL_PROGMEM =
+{
+    CRGB::Black,
+    CRGB::Maroon,
+    CRGB::Black,
+    0x940001,
+
+    CRGB::DarkRed,
+    CRGB::DarkRed,
+    CRGB::Maroon,
+    CRGB::OrangeRed,
+
+    CRGB::DarkRed,
+    CRGB::DarkRed,
+    CRGB::Red,
+    0x940001,
+
+    CRGB::DarkRed,
+    CRGB::Maroon,
+    CRGB::Black,
+    0x940001
+};
+
 const TProgmemRGBPalette16 Christmas_p FL_PROGMEM =
 {
     0x00FF00,   // Bright Green
@@ -187,18 +210,23 @@ void CLEDManager::initFastLED() {
 }
 
 void CLEDManager::registerModes() {
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Stranger Things", StrangerThings_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Stranger Things", StrangerThings_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Heat", HeatColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Lava", LavaColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  //
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
   //
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
   //
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Cloud Colors", CloudColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
   modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
   //
   modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
 }
