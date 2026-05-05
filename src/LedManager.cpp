@@ -83,17 +83,15 @@ void CLEDManager::initFastLED() {
 }
 
 void CLEDManager::registerModes() {
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Green",   CRGB(0,   255, 0)));    // 0
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Red",     CRGB(255, 0,   0)));    // 1
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Blue",    CRGB(0,   0,   255)));  // 2
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Yellow",  CRGB(255, 255, 0)));    // 3
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Cyan",    CRGB(0,   255, 255)));  // 4
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Magenta", CRGB(255, 0,   255)));  // 5
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Orange",  CRGB(255, 128, 0)));    // 6
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Purple",  CRGB(148, 0,   211)));  // 7
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "White",   CRGB(255, 255, 255)));  // 8
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Pink",    CRGB(255, 105, 180)));  // 9
-  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Teal",    CRGB(0,   128, 128)));  // 10
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Green",   CRGB(0,   255, 0),   1));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Red",     CRGB(255, 0,   0),   2));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Blue",    CRGB(0,   0,   255), 3));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Yellow",  CRGB(255, 255, 0),   4));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Cyan",    CRGB(0,   255, 255), 5));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Magenta", CRGB(255, 0,   255), 6));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Orange",  CRGB(255, 128, 0),   7));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "Purple",  CRGB(148, 0,   211), 8));
+  modes.push_back(new CSolidColorMode(configuration.ledStripSize, "White",   CRGB(255, 255, 255), 9));
 }
 
 void CLEDManager::handleChargingInput() {
