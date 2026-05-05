@@ -25,6 +25,7 @@ protected:
 public:
 	CBaseMode(const uint16_t numLeds, const String name);
     virtual void draw(CRGB *leds) {};
+    virtual CRGB getColor() const { return CRGB(0, 0, 0); }
 
     const String getName() { return name; }
 };

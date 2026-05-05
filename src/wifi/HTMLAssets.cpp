@@ -115,12 +115,8 @@ const char htmlMain[] PROGMEM = R"=====(
             </select>
           </label>
           <br/>
-          <label>
-            LED Mode
-            <select name='ledMode' id='ledMode'>
-              %s
-            </select>
-          </label>
+          <label>LED Mode</label>
+          %s
           <br/>
           <label>
             Brightness <output id='ledBrightnessLabelId'>%.0f</output>%%

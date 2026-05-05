@@ -815,16 +815,34 @@ void CWifiManager::printHTMLMain(Print *p) {
     typeOptions += String("<option") + String(i == configuration.ledType ? " selected" : "") + String(" value='") + String(i) + String("'>") + String(ledTypes[i]) + String("</option>");
   }
 
-  String modeOptions = "";
   String currentModeName = "Unknown";
+  if (modes != NULL && configuration.ledMode < modes->size()) {
+    currentModeName = (*modes)[configuration.ledMode]->getName();
+  }
+
+  String modeOptions = String("<input type='hidden' id='ledMode' name='ledMode' value='") + configuration.ledMode + "'>\n";
+  modeOptions += "<table style='width:100%;border-collapse:collapse;margin-bottom:1rem'><tbody>";
   if (modes != NULL) {
-    for(uint8_t i=0; i<modes->size(); i++) {
-      modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
+    for (uint8_t i = 0; i < modes->size(); i++) {
+      if (i % 2 == 0) modeOptions += "<tr>";
+      bool isSelected = (i == configuration.ledMode);
+      CRGB c = (*modes)[i]->getColor();
+      char bg[8];
+      snprintf(bg, sizeof(bg), "#%02X%02X%02X", c.r, c.g, c.b);
+      modeOptions += String("<td style='padding:4px'>");
+      modeOptions += String("<button type='button' onclick=\"document.getElementById('ledMode').value='") + i;
+      modeOptions += "';document.querySelector('form').requestSubmit();\"";
+      modeOptions += String(" style='width:100%;height:48px;background:") + bg
+        + ";border:3px solid " + (isSelected ? "#fff" : "transparent")
+        + ";border-radius:4px;cursor:pointer'>";
+      modeOptions += "</button></td>";
+      if (i % 2 == 1) modeOptions += "</tr>";
     }
-    if (configuration.ledMode < modes->size()) {
-      currentModeName = (*modes)[configuration.ledMode]->getName();
+    if (modes->size() % 2 != 0) {
+      modeOptions += "<td></td></tr>";
     }
   }
+  modeOptions += "</tbody></table>";
 
   // Calculate remaining time
   String timeRemaining;
