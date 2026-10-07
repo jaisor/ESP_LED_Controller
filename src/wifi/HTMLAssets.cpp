@@ -174,6 +174,14 @@ const char htmlMain[] PROGMEM = R"=====(
 
 const char htmlDevice[] PROGMEM = R"=====(
       <h3>Device Settings</h3>
+      <fieldset>
+        <legend><strong>🔩 Chip</strong></legend>
+        <label>Model <kbd>%s</kbd> rev <kbd>%u</kbd></label>
+        <br/>
+        <label>Flash <kbd>%u MB</kbd></label>
+        <br/>
+        <label>MAC address <kbd>%s</kbd></label>
+      </fieldset>
       <form method='POST' action='device' enctype='application/x-www-form-urlencoded' delay='8000'>
         <fieldset>
           <label>

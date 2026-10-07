@@ -1,7 +1,7 @@
 
 #ifndef VERSION
-  #define VERSION "dev.1777946268 - 2026-05-04 18:57:48.925456"
+  #define VERSION "dev.1791350189 - 2026-10-06 22:16:29.059446"
 #endif
 #ifndef VERSION_SHORT
-  #define VERSION_SHORT "dev.1777946268"
+  #define VERSION_SHORT "dev.1791350189"
 #endif

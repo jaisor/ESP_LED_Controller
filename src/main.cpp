@@ -26,7 +26,14 @@ void setup() {
   pinMode(INTERNAL_LED_PIN, OUTPUT);
 
   #ifndef DISABLE_LOGGING
-  Serial.begin(SERIAL_MONITOR_BAUD); while (!Serial); delay(100);
+  Serial.begin(SERIAL_MONITOR_BAUD);
+  // Bounded wait. On the USB-CDC targets (ESP32-C3/S3) Serial only becomes true once a
+  // terminal attaches, so an unbounded `while (!Serial)` stops setup() from ever reaching
+  // loop() - and loop() is where the factory reset counter is cleared, so three headless
+  // boots in that state wipe the stored configuration.
+  unsigned long tsSerial = millis();
+  while (!Serial && millis() - tsSerial < 3000) { delay(10); }
+  delay(100);
   Log.begin(LOG_LEVEL, &Serial);
   Log.infoln(F("\n\nInitializing..."));
     #ifdef WEB_LOGGING

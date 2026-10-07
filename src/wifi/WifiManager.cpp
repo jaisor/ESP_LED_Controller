@@ -111,10 +111,19 @@ CWifiManager::CWifiManager()
   deviceJson["dev_name"] = configuration.name;
   deviceJson["version"] = VERSION;
   deviceJson["version_short"] = VERSION_SHORT;
+  deviceJson["chip_model"] = CONFIG_getChipModel();
+  deviceJson["chip_revision"] = CONFIG_getChipRevision();
+  deviceJson["flash_size_bytes"] = CONFIG_getFlashChipSize();
 
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
   connect();
+}
+
+// WiFi.localIP() is 0.0.0.0 while running as a soft AP, so the reachable address has to be
+// picked per mode rather than read from localIP() unconditionally.
+String CWifiManager::currentIP() {
+  return isApMode() ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
 }
 
 void CWifiManager::connect() {
@@ -253,9 +262,10 @@ void CWifiManager::listen() {
   server->addHandler(handler);
 
   server->begin();
-  Log.infoln("Web server listening on %s port %i", WiFi.localIP().toString().c_str(), WEB_SERVER_PORT);
+  Log.infoln("Web server listening on http://%s:%i", currentIP().c_str(), WEB_SERVER_PORT);
 
-  deviceJson["ip"] = WiFi.localIP().toString();
+  deviceJson["ip"] = currentIP();
+  deviceJson["mac_address"] = WiFi.macAddress();
   
   #ifdef OLED
   if (device) {
@@ -299,6 +309,16 @@ void CWifiManager::loop() {
     // WiFi is connected
 
     if (status != WF_LISTENING) {  
+      if (isApMode()) {
+        Log.noticeln("WiFi AP '%s' ready, IP address: %s", softAP_SSID, WiFi.softAPIP().toString().c_str());
+      } else {
+        Log.noticeln("WiFi connected to '%s', IP address: %s, gateway: %s, subnet: %s, RSSI: %i dBm",
+          WiFi.SSID().c_str(),
+          WiFi.localIP().toString().c_str(),
+          WiFi.gatewayIP().toString().c_str(),
+          WiFi.subnetMask().toString().c_str(),
+          WiFi.RSSI());
+      }
       // Start listening for requests
       if (device) {
         device->setState(isApMode() ? DeviceState::WIFI_AP_CREATED : DeviceState::WIFI_CONNECTED);
@@ -622,7 +642,10 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
 
     AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8", 6144);
     printHTMLTop(response);
-    response->printf_P(htmlDevice, configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str());
+    response->printf_P(htmlDevice,
+      CONFIG_getChipModel().c_str(), CONFIG_getChipRevision(),
+      CONFIG_getFlashChipSize() / (1024 * 1024), WiFi.macAddress().c_str(),
+      configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str());
     printHTMLBottom(response);
     request->send(response);
   }

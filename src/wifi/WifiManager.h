@@ -42,6 +42,7 @@ private:
   JsonDocument configJson;
   JsonDocument deviceJson;
 
+  String currentIP();
   void connect();
   void listen();
 

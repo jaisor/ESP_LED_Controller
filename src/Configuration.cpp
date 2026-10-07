@@ -185,6 +185,30 @@ uint32_t CONFIG_getDeviceId() {
   return chipId;
 }
 
+String CONFIG_getChipModel() {
+  #ifdef ESP32
+    return ESP.getChipModel();
+  #elif ESP8266
+    return "ESP8266";
+  #endif
+}
+
+uint8_t CONFIG_getChipRevision() {
+  #ifdef ESP32
+    return ESP.getChipRevision();
+  #elif ESP8266
+    return 0; // not exposed by the ESP8266 core
+  #endif
+}
+
+uint32_t CONFIG_getFlashChipSize() {
+  #ifdef ESP32
+    return ESP.getFlashChipSize();
+  #elif ESP8266
+    return ESP.getFlashChipRealSize();
+  #endif
+}
+
 static unsigned long tMillisUp = millis();
 unsigned long CONFIG_getUpTime() {  
   return millis() - tMillisUp;

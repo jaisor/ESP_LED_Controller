@@ -162,6 +162,10 @@ void EEPROM_wipe();
 uint32_t CONFIG_getDeviceId();
 unsigned long CONFIG_getUpTime();
 
+String CONFIG_getChipModel();
+uint8_t CONFIG_getChipRevision();
+uint32_t CONFIG_getFlashChipSize();
+
 void intLEDOn();
 void intLEDOff();
 void intLEDBlink(uint16_t ms);
