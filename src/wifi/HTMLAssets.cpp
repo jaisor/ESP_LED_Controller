@@ -429,9 +429,27 @@ const char htmlModes[] PROGMEM = R"=====(
         current layout, <b id='layoutName'></b> (<a href='led'>change</a>).
       </p>
       <div id='savedModes'></div>
+      <div id='codeBox' hidden>
+        <label>
+          Mode code for <b id='codeName'></b>
+          <div role='group'>
+            <input type='text' id='codeOut' readonly>
+            <button type='button' id='copyCode'>Copy</button>
+          </div>
+          <sub><small>Paste it into the Mode Configurator of another controller</small></sub>
+        </label>
+      </div>
       <article>
         <form id='modeForm'>
           <h4 id='formTitle'>New mode</h4>
+          <details id='pasteBox'>
+            <summary>Paste a mode code from another controller</summary>
+            <div role='group'>
+              <input type='text' id='codeIn' placeholder='{"name": ...}' autocomplete='off'>
+              <button type='button' class='secondary' id='loadCode'>Load</button>
+            </div>
+            <sub><small id='codeStatus'></small></sub>
+          </details>
           <fieldset>
             <label>
               Name
@@ -479,6 +497,7 @@ const char htmlModes[] PROGMEM = R"=====(
         (function () {
           var data = %s;
           var editing = -1; // slot being edited, -1 for a new mode
+          var codeSlot = -1; // slot whose code is shown, -1 for none
           var $ = function (id) { return document.getElementById(id); };
 
           function effectById(id) {
@@ -532,6 +551,7 @@ const char htmlModes[] PROGMEM = R"=====(
               m.colors.forEach(function (c) { colors.appendChild(swatch(c)); });
               var actions = row.insertCell();
               actions.appendChild(button('Edit', 'secondary', function () { edit(m); }));
+              actions.appendChild(button('Code', 'secondary outline', function () { showCode(m); }));
               actions.appendChild(button('Delete', 'secondary outline', function () {
                 if (!confirm('Delete "' + m.name + '"?')) return;
                 send({ slot: m.slot, delete: true }, this).then(function () {
@@ -543,6 +563,83 @@ const char htmlModes[] PROGMEM = R"=====(
             var used = document.createElement('p');
             used.innerHTML = '<small>' + data.modes.length + ' of ' + data.slots + ' custom mode slots used</small>';
             box.appendChild(used);
+          }
+
+          // A mode code is what another controller needs to recreate the mode; slot and index are local
+          function modeCode(m) {
+            return JSON.stringify({
+              name: m.name, effect: m.effect, colors: m.colors, smooth: m.smooth,
+              direction: m.direction, speed: m.speed, repeat: m.repeat
+            });
+          }
+
+          function showCode(m) {
+            codeSlot = m ? m.slot : -1;
+            $('codeBox').hidden = !m;
+            if (!m) return;
+            $('codeName').textContent = m.name;
+            $('codeOut').value = modeCode(m);
+            $('codeOut').focus();
+            $('codeOut').select();
+          }
+
+          // Keeps the shown code in step with saves and deletes
+          function refreshCode() {
+            if (codeSlot < 0) return;
+            var m = data.modes.find(function (x) { return x.slot === codeSlot; });
+            showCode(m || null);
+          }
+
+          function clamp(value, low, high, fallback) {
+            var n = parseInt(value, 10);
+            return isNaN(n) ? fallback : Math.min(high, Math.max(low, n));
+          }
+
+          // Validated the same way the controller will, so mistakes show up before saving
+          function parseCode(text) {
+            var m;
+            try {
+              m = JSON.parse(text);
+            } catch (e) {
+              throw new Error('not valid JSON - copy the whole code');
+            }
+            if (!m || typeof m !== 'object' || Array.isArray(m)) throw new Error('not a mode code');
+            if (typeof m.name !== 'string' || !m.name.trim()) throw new Error('the code has no name');
+            var e = effectById(m.effect);
+            if (!e) throw new Error('effect "' + m.effect + '" is not supported by this controller');
+            if (!Array.isArray(m.colors) || !m.colors.length || m.colors.length > data.maxColors
+                || !m.colors.every(function (c) { return /^#[0-9a-f]{6}$/i.test(c); })) {
+              throw new Error('colors must be 1 to ' + data.maxColors + ' #rrggbb values');
+            }
+            // Direction picks an option, so an unknown one falls back to the first rather than the nearest
+            var directions = e.directions ? e.directions.split('|').length : 1;
+            var direction = parseInt(m.direction, 10);
+            return {
+              slot: -1,
+              name: m.name.trim().slice(0, 23),
+              effect: e.id,
+              colors: m.colors.map(function (c) { return c.toLowerCase(); }),
+              smooth: m.smooth !== false,
+              direction: direction >= 0 && direction < directions ? direction : 0,
+              speed: clamp(m.speed, 1, 10, 3),
+              repeat: clamp(m.repeat, 1, 10, 1)
+            };
+          }
+
+          function loadCode() {
+            var status = $('codeStatus');
+            var m;
+            try {
+              m = parseCode($('codeIn').value.trim());
+            } catch (e) {
+              status.textContent = "Can't load: " + e.message;
+              return;
+            }
+            edit(m);
+            $('formTitle').textContent = 'New mode "' + m.name + '" (from code, not saved yet)';
+            status.textContent = effectById(m.effect).available
+              ? 'Loaded below - review it and save.'
+              : 'Loaded below. Its effect does not fit this layout, so once saved it stays hidden until the layout changes.';
           }
 
           function updateColorButtons() {
@@ -632,6 +729,7 @@ const char htmlModes[] PROGMEM = R"=====(
             }).then(function (d) {
               data = d;
               renderSaved();
+              refreshCode();
               return d;
             }).catch(function (e) {
               alert('Not saved: ' + e.message);
@@ -670,6 +768,30 @@ const char htmlModes[] PROGMEM = R"=====(
             addColor(inputs.length ? inputs[inputs.length - 1].value : '#ffffff');
           });
           $('newButton').addEventListener('click', function () { edit(null); });
+          $('loadCode').addEventListener('click', loadCode);
+          $('codeIn').addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {  // Would submit the mode form otherwise
+              event.preventDefault();
+              loadCode();
+            }
+          });
+          $('codeOut').addEventListener('focus', function () { this.select(); });
+          $('copyCode').addEventListener('click', function () {
+            var trigger = this;
+            var done = function () {
+              trigger.textContent = 'Copied';
+              setTimeout(function () { trigger.textContent = 'Copy'; }, 1500);
+            };
+            $('codeOut').select();
+            // The Clipboard API needs HTTPS, which the controller doesn't serve; execCommand works over HTTP
+            if (navigator.clipboard && window.isSecureContext) {
+              navigator.clipboard.writeText($('codeOut').value).then(done, function () {
+                if (document.execCommand('copy')) done();
+              });
+            } else if (document.execCommand('copy')) {
+              done();
+            }
+          });
           $('speed').addEventListener('input', updateOutputs);
           $('repeat').addEventListener('input', updateOutputs);
 

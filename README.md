@@ -11,7 +11,7 @@
     * serves a webpage for managing LED - mode, brightness, cycling and power-save hours
     * LED setup page (`/led`) - layout (single strip, dual strip, ring light), LED count, data pin(s), chipset and color order
     * configuration export and import as a JSON file on the Device page
-    * Mode Configurator (`/modes`) - define up to 8 custom modes: name, color palette (up to 8 colors, smooth or hard transitions), effect, direction, speed and palette repeats. Effects depend on the layout: color fade, edge to edge and twinkle everywhere, center to edge on strips, circling, ring halves and ring to ring on a ring light
+    * Mode Configurator (`/modes`) - define up to 8 custom modes: name, color palette (up to 8 colors, smooth or hard transitions), effect, direction, speed and palette repeats. Effects depend on the layout: color fade, edge to edge and twinkle everywhere, center to edge on strips, circling, ring halves and ring to ring on a ring light. A mode's **Code** button shows it as a short JSON code that can be pasted into another controller's configurator
 * MQTT and Home Assistant (Device page) - set the broker and the controller shows up in Home Assistant through MQTT discovery as a light: on/off, brightness, and the modes of the current layout (custom modes included) as effects, plus WiFi signal and IP diagnostics. Other MQTT clients can use the same topics, see below
 * Firmware update over WiFi - new `firmware.bin` file can be uploaded at `/update` after the IP address
 
