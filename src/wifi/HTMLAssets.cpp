@@ -14,6 +14,7 @@ const char htmlTop[] PROGMEM = R"=====(
         document.querySelector("form").addEventListener("submit", function (event) {
           var data = this;
           var submit = data.querySelector("button[type='submit']");
+          var label = submit.innerHTML;
           var d = data.getAttribute("delay");
           submit.setAttribute("aria-busy", true);
           submit.setAttribute("disabled", "");
@@ -21,7 +22,18 @@ const char htmlTop[] PROGMEM = R"=====(
           fetch(data.getAttribute("action"), {
             method: data.getAttribute("method"),
             body: new FormData(data)
-          }).then(res=>res.text())
+          }).then(function (res) {
+              return res.text().then(function (text) {
+                if (res.status >= 400) {
+                  alert("Not saved: " + text);
+                  submit.removeAttribute("aria-busy");
+                  submit.removeAttribute("disabled");
+                  submit.innerHTML = label;
+                  throw null;
+                }
+                return text;
+              });
+            })
             .then(function (data) {
               console.log("Server response: " + data);
               setTimeout(function () {
@@ -30,6 +42,7 @@ const char htmlTop[] PROGMEM = R"=====(
               }, d);
             })
             .catch((e) => {
+              if (e === null) return; // rejected by the device, form left as is
               console.error(e);
               location.reload(true); 
             });
@@ -53,6 +66,7 @@ const char htmlTop[] PROGMEM = R"=====(
           <details class="dropdown">
             <summary>⚙️</summary>
             <ul dir="rtl">
+              <li><a href="led">LED Setup 💡</a></li>
               <li><a href="wifi">WiFi 🛜</a></li>
               <li><a href="device">Device 📟</a></li>
             </ul>
@@ -101,20 +115,9 @@ const char htmlMain[] PROGMEM = R"=====(
       <h3>LED Settings</h3>
       <p><b>Current Mode:</b> %s <br/> <b>Next change:</b> %s</p>
       %s
+      <p>💡 %s <a href='led'>change</a></p>
       <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
-          <label>
-            LED strip length
-            <input type='text' id='ledStripSize' name='ledStripSize' value='%u'>
-          </label>
-          <br/>
-          <label>
-            LED Type
-            <select name='ledType' id='ledType'>
-              %s
-            </select>
-          </label>
-          <br/>
           <label>
             LED Mode
             <select name='ledMode' id='ledMode'>
@@ -204,6 +207,174 @@ const char htmlDevice[] PROGMEM = R"=====(
         </fieldset>
         <button type='submit' value='Submit'>Submit...</button>
       </form>
+      <h3>Backup</h3>
+      <fieldset>
+        <legend><strong>💾 Configuration file</strong></legend>
+        <p><small>Device, LED, power-save and time settings as JSON. The WiFi password is never exported.</small></p>
+        <a href='config' download='%s.json' role='button' class='secondary'>Export</a>
+        <br/><br/>
+        <label>
+          Import from file
+          <input type='file' id='importFile' accept='.json,application/json'>
+        </label>
+        <label>
+          <input type='checkbox' id='importWifi'>
+          Also import the WiFi network (SSID and power)
+        </label>
+        <button type='button' id='importButton'>Import and reboot...</button>
+        <small id='importStatus'></small>
+      </fieldset>
+      <script>
+        document.getElementById('importButton').addEventListener('click', function () {
+          var button = this;
+          var status = document.getElementById('importStatus');
+          var file = document.getElementById('importFile').files[0];
+          if (!file) {
+            status.textContent = 'Choose a configuration file first';
+            return;
+          }
+          file.text().then(function (text) {
+            var config = JSON.parse(text);
+            if (!config || typeof config !== 'object' || Array.isArray(config)) {
+              throw new Error('not a configuration object');
+            }
+            if (!document.getElementById('importWifi').checked) {
+              ['wifiSsid', 'wifiPassword', 'wifiPower'].forEach(function (k) { delete config[k]; });
+            }
+            button.setAttribute('aria-busy', 'true');
+            button.disabled = true;
+            status.textContent = '';
+            return fetch('config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(config)
+            });
+          }).then(function (res) {
+            return res.text().then(function (text) {
+              if (!res.ok) throw new Error(text);
+              status.textContent = 'Imported, rebooting...';
+              setTimeout(function () { location.reload(); }, 10000);
+            });
+          }).catch(function (e) {
+            status.textContent = 'Import failed: ' + e.message;
+            button.removeAttribute('aria-busy');
+            button.disabled = false;
+          });
+        });
+      </script>
+)=====";
+
+// data-layout values match LED_LAYOUT_IDS
+const char htmlLed[] PROGMEM = R"=====(
+      <h3>LED Setup</h3>
+      <p>💡 %s</p>
+      <form method='POST' action='led' enctype='application/x-www-form-urlencoded' delay='10000'>
+        <fieldset>
+          <label>
+            Layout
+            <select name='ledLayout' id='ledLayout'>
+              %s
+            </select>
+            <sub><small id='layoutHelp'></small></sub>
+          </label>
+          <br/>
+          <label>
+            LED chipset
+            <select name='ledType' id='ledType'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label>
+            Color order
+            <select name='ledColorOrder' id='ledColorOrder'>
+              %s
+            </select>
+            <sub><small>If colors come out wrong (red shows as green), try another order - most WS2812B strips are GRB</small></sub>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend><strong id='strip1Legend'>Strip</strong></legend>
+          <label>
+            Data pin
+            <select name='ledPin' id='ledPin'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label>
+            <span id='sizeLabel'>Number of LEDs</span>
+            <input type='number' id='ledStripSize' name='ledStripSize' min='1' max='%u' value='%u' required>
+          </label>
+          <div data-layout='ring'>
+            <label>
+              Outer ring LEDs
+              <input type='number' id='ledRingOuterSize' name='ledRingOuterSize' min='2' value='%u' required>
+              <sub><small>The inner ring gets the remaining <output id='innerSize'></output> LEDs</small></sub>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset data-layout='dual'>
+          <legend><strong>Second strip</strong></legend>
+          <label>
+            <input type='checkbox' role='switch' id='ledMirror' name='ledMirror' %s>
+            Mirror the first strip
+            <br/><sub><small>Both strips show the same pattern and the second strip uses the first strip's length</small></sub>
+          </label>
+          <br/>
+          <label>
+            Data pin
+            <select name='ledPin2' id='ledPin2'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label id='strip2Size'>
+            Number of LEDs
+            <input type='number' id='ledStripSize2' name='ledStripSize2' min='1' max='%u' value='%u' required>
+          </label>
+        </fieldset>
+        <p><small>Saving reboots the device. Modes that don't fit the new layout are skipped.</small></p>
+        <button type='submit' value='Submit'>Save and reboot...</button>
+      </form>
+      <script>
+        (function () {
+          var $ = function (id) { return document.getElementById(id); };
+          var layout = $('ledLayout'), mirror = $('ledMirror'), pin = $('ledPin'), pin2 = $('ledPin2');
+          var size = $('ledStripSize'), size2 = $('ledStripSize2'), outer = $('ledRingOuterSize');
+          var text = {
+            single: ['Strip', 'Number of LEDs', 'One strip on one data pin.'],
+            dual: ['First strip', 'Number of LEDs', 'Two strips on separate data pins, animated as one continuous strip or mirrored.'],
+            ring: ['Rings', 'Total LEDs (outer + inner ring)', 'One chain on one data pin, outer ring first, then the inner ring. Adds ring modes that animate each ring separately.']
+          };
+          function setEnabled(el, on) {
+            el.hidden = !on;
+            el.querySelectorAll('input, select').forEach(function (i) { i.disabled = !on; });
+          }
+          function update() {
+            var l = layout.value;
+            document.querySelectorAll('[data-layout]').forEach(function (e) {
+              setEnabled(e, e.getAttribute('data-layout') === l);
+            });
+            if (l === 'dual') setEnabled($('strip2Size'), !mirror.checked);
+            $('strip1Legend').textContent = text[l][0];
+            $('sizeLabel').textContent = text[l][1];
+            $('layoutHelp').textContent = text[l][2];
+            var total = parseInt(size.value, 10) || 0;
+            size.min = l === 'ring' ? 4 : 1;
+            outer.max = Math.max(2, total - 2);
+            $('innerSize').value = total - (parseInt(outer.value, 10) || 0);
+            pin2.setCustomValidity(l === 'dual' && pin2.value === pin.value ? 'Each strip needs its own data pin' : '');
+            var count = total + (l === 'dual' ? (mirror.checked ? total : (parseInt(size2.value, 10) || 0)) : 0);
+            size.setCustomValidity(count > parseInt(size.max, 10) ? 'At most ' + size.max + ' LEDs across all strips' : '');
+          }
+          [layout, mirror, pin, pin2, size, size2, outer].forEach(function (e) {
+            e.addEventListener('input', update);
+            e.addEventListener('change', update);
+          });
+          update();
+        })();
+      </script>
 )=====";
 
 const char cssPico[] PROGMEM = R"=====(

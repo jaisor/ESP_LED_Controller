@@ -111,8 +111,64 @@ const TProgmemRGBPalette16 Christmas_p FL_PROGMEM =
     0x00FF00,   // Bright Green
 };
 
+#if FASTLED_HAS_CHANNELS
+// ESP32 family: FastLED channels take pin, timing and color order at runtime
+static fl::ClocklessChipset clocklessChipset(uint8_t type, uint8_t pin) {
+  switch (type) {
+    case 2:  return fl::makeClockless<fl::TIMING_WS2813>(pin);
+    case 3:  return fl::makeClockless<fl::TIMING_WS2815>(pin);
+    case 4:  return fl::makeClockless<fl::TIMING_SK6812>(pin);
+    case 5:  // TM1809
+    case 6:  return fl::makeClockless<fl::TIMING_TM1809_800KHZ>(pin); // TM1804
+    case 7:  return fl::makeClockless<fl::TIMING_TM1803_400KHZ>(pin);
+    case 8:  return fl::makeClockless<fl::TIMING_UCS1903_400KHZ>(pin);
+    case 9:  return fl::makeClockless<fl::TIMING_UCS1904_800KHZ>(pin);
+    case 10: return fl::makeClockless<fl::TIMING_GS1903>(pin);
+    case 11: return fl::makeClockless<fl::TIMING_PL9823>(pin);
+    case 13: return fl::makeClockless<fl::TIMING_WS2811_800KHZ_LEGACY>(pin);
+    default: return fl::makeClockless<fl::TIMING_WS2812_800KHZ>(pin); // WS2812B, WS2812, WS2852
+  }
+}
+#else
+// ESP8266: pin is a template parameter, so there is one controller class per timing and LED_PIN_LIST pin.
+// Only the ones in use are allocated. They all send RGB; show() puts the channels in the configured
+// order while copying into hwLeds.
+template <typename TIMING>
+static CLEDController* clocklessController(uint8_t pin) {
+  switch (pin) {
+    #define LED_PIN_CASE(p) case p: return new fl::ClocklessControllerImpl<p, TIMING, RGB>();
+    LED_PIN_LIST(LED_PIN_CASE)
+    #undef LED_PIN_CASE
+  }
+  return nullptr;
+}
+
+static CLEDController* clocklessController(uint8_t type, uint8_t pin) {
+  switch (type) {
+    case 2:  return clocklessController<fl::TIMING_WS2813>(pin);
+    case 3:  return clocklessController<fl::TIMING_WS2815>(pin);
+    case 4:  return clocklessController<fl::TIMING_SK6812>(pin);
+    case 5:  // TM1809
+    case 6:  return clocklessController<fl::TIMING_TM1809_800KHZ>(pin); // TM1804
+    case 7:  return clocklessController<fl::TIMING_TM1803_400KHZ>(pin);
+    case 8:  return clocklessController<fl::TIMING_UCS1903_400KHZ>(pin);
+    case 9:  return clocklessController<fl::TIMING_UCS1904_800KHZ>(pin);
+    case 10: return clocklessController<fl::TIMING_GS1903>(pin);
+    case 11: return clocklessController<fl::TIMING_PL9823>(pin);
+    case 13: return clocklessController<fl::TIMING_WS2811_800KHZ_LEGACY>(pin);
+    default: return clocklessController<fl::TIMING_WS2812_800KHZ>(pin); // WS2812B, WS2812, WS2852
+  }
+}
+
+// Byte n on the wire is the channel named by octal digit n of the EOrder, same as FastLED's own reordering
+static inline CRGB toWireOrder(const CRGB &c, uint8_t order) {
+  return CRGB(c.raw[(order >> 6) & 0x3], c.raw[(order >> 3) & 0x3], c.raw[order & 0x3]);
+}
+#endif
+
 CLEDManager::CLEDManager()
-: leds(nullptr), chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
+: leds(nullptr), hwLeds(nullptr), renderSize(0), hwSize(0), layout(LED_LAYOUT_SINGLE), colorOrder(static_cast<uint8_t>(RGB)), mirror(false),
+  chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
 
 CLEDManager::~CLEDManager() {
   for (auto *mode : modes) {
@@ -123,6 +179,10 @@ CLEDManager::~CLEDManager() {
   delete chargingMode;
   chargingMode = nullptr;
 
+  if (hwLeds != leds) {
+    delete[] hwLeds;
+  }
+  hwLeds = nullptr;
   delete[] leds;
   leds = nullptr;
 }
@@ -133,15 +193,29 @@ void CLEDManager::setup() {
     pinMode(BUTTON_2_PIN, INPUT_PULLUP);
   #endif
 
-  leds = new CRGB[configuration.ledStripSize];
+  layout = configuration.ledLayout;
+  colorOrder = configuration.ledColorOrder;
+  mirror = layout == LED_LAYOUT_DUAL && configuration.ledMirror;
+  hwSize = CONFIG_getLedCount(configuration);
+  // A mirrored second strip repeats the first, so modes only draw the first strip's length
+  renderSize = mirror ? configuration.ledStripSize : hwSize;
+
+  bool remap = mirror;
+  #if !FASTLED_HAS_CHANNELS
+    remap = remap || colorOrder != static_cast<uint8_t>(RGB);
+  #endif
+  leds = new CRGB[renderSize];
+  hwLeds = remap ? new CRGB[hwSize] : leds;
+
+  Log.infoln("LED layout '%s': %d LEDs, %s, color order %s", LED_LAYOUT_IDS[layout], hwSize,
+    LED_TYPE_NAMES[configuration.ledType], CONFIG_ledColorOrderName(colorOrder));
   initFastLED();
 
-  Log.infoln("LED Type configured: %d", configuration.ledType);
   FastLED.setBrightness(255);
   CONFIG_getLedBrightness(true);
 
   registerModes();
-  chargingMode = new CChargingMode(configuration.ledStripSize, "Charging");
+  chargingMode = new CChargingMode(renderSize, "Charging");
 
   tsCycleMs = millis();
 }
@@ -153,8 +227,12 @@ void CLEDManager::loop() {
     return;
   }
 
-  if (configuration.ledMode > modes.size() - 1) {
+  if (!isModeAvailable(configuration.ledMode)) {
+    // Saved mode is out of range or doesn't fit this layout - fall back to the first one that does
     configuration.ledMode = 0;
+    while (configuration.ledMode < modes.size() - 1 && !isModeAvailable(configuration.ledMode)) {
+      configuration.ledMode++;
+    }
   }
   handleChargingInput();
 
@@ -167,40 +245,76 @@ void CLEDManager::loop() {
 }
 
 void CLEDManager::initFastLED() {
-  switch(configuration.ledType) {
-    case 0:  FastLED.addLeds<WS2812B, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 1:  FastLED.addLeds<WS2812, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 2:  FastLED.addLeds<WS2813, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 3:  FastLED.addLeds<WS2815, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 4:  FastLED.addLeds<SK6812, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 5:  FastLED.addLeds<TM1809, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 6:  FastLED.addLeds<TM1804, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 7:  FastLED.addLeds<TM1803, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 8:  FastLED.addLeds<UCS1903, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 9:  FastLED.addLeds<UCS1904, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 10: FastLED.addLeds<GS1903, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 11: FastLED.addLeds<PL9823, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 12: FastLED.addLeds<WS2852, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    case 13: FastLED.addLeds<WS2811, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
-    default: FastLED.addLeds<WS2812B, LED_PIN, LED_COLOR_ORDER>(leds, configuration.ledStripSize).setCorrection(TypicalLEDStrip); break;
+  addStrip(configuration.ledPin, hwLeds, configuration.ledStripSize);
+  if (layout == LED_LAYOUT_DUAL) {
+    addStrip(configuration.ledPin2, hwLeds + configuration.ledStripSize, hwSize - configuration.ledStripSize);
   }
 }
 
+void CLEDManager::addStrip(uint8_t pin, CRGB *data, uint16_t count) {
+  Log.infoln("Adding %d LEDs on GPIO %d", count, pin);
+#if FASTLED_HAS_CHANNELS
+  fl::ChannelOptions options;
+  options.mCorrection = TypicalLEDStrip;
+  fl::ChannelConfig config(clocklessChipset(configuration.ledType, pin), fl::span<CRGB>(data, count), (EOrder)colorOrder, options);
+  if (FastLED.add(config) == nullptr) {
+    Log.errorln("Unable to drive LEDs on GPIO %d", pin);
+  }
+#else
+  CLEDController *controller = clocklessController(configuration.ledType, pin);
+  if (!controller) {
+    Log.errorln("GPIO %d can't drive LEDs", pin);
+    return;
+  }
+  // Correction scales wire bytes, so it gets the same reordering as the pixels
+  FastLED.addLeds(controller, data, count).setCorrection(toWireOrder(CRGB(TypicalLEDStrip), colorOrder));
+#endif
+}
+
+void CLEDManager::addMode(CBaseMode *mode, uint8_t layouts) {
+  mode->setLayouts(layouts);
+  modes.push_back(mode);
+}
+
+bool CLEDManager::isModeAvailable(uint8_t index) {
+  return index < modes.size() && modes[index]->supportsLayout(layout);
+}
+
 void CLEDManager::registerModes() {
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Party Colors", PartyColors_p, 255.0 / (float)configuration.ledStripSize));
+  // Indices are persisted in ledMode and cycleModesList - append new modes at the end
+  const uint16_t n = renderSize;
+  addMode(new CPaletteMode(n, "Party Colors", PartyColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
   //
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Cloud", CloudColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
-  modes.push_back(new CHalfwayPaletteMode(configuration.ledStripSize, "Halfway Party", PartyColors_p, 255.0 / ((float)configuration.ledStripSize / 2.0)));
+  addMode(new CHalfwayPaletteMode(n, "Halfway Rainbow", RainbowColors_p, 255.0 / ((float)n / 2.0)), LED_LAYOUTS_ALL);
+  addMode(new CHalfwayPaletteMode(n, "Halfway Cloud", CloudColors_p, 255.0 / ((float)n / 2.0)), LED_LAYOUTS_ALL);
+  addMode(new CHalfwayPaletteMode(n, "Halfway Party", PartyColors_p, 255.0 / ((float)n / 2.0)), LED_LAYOUTS_ALL);
   //
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Heat Colors", HeatColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Rainbow Colors", RainbowColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Cloud Colors", CloudColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Forest Colors", ForestColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Ocean Colors", OceanColors_p, 255.0 / (float)configuration.ledStripSize));
-  modes.push_back(new CPaletteMode(configuration.ledStripSize, "Lava Colors", LavaColors_p, 255.0 / (float)configuration.ledStripSize));
+  addMode(new CPaletteMode(n, "Heat Colors", HeatColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
+  addMode(new CPaletteMode(n, "Rainbow Colors", RainbowColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
+  addMode(new CPaletteMode(n, "Cloud Colors", CloudColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
+  addMode(new CPaletteMode(n, "Forest Colors", ForestColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
+  addMode(new CPaletteMode(n, "Ocean Colors", OceanColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
+  addMode(new CPaletteMode(n, "Lava Colors", LavaColors_p, 255.0 / (float)n), LED_LAYOUTS_ALL);
   //
-  modes.push_back(new CWhiteLightMode(configuration.ledStripSize, "White Light"));
+  addMode(new CWhiteLightMode(n, "White Light"), LED_LAYOUTS_ALL);
+
+  // Ring light modes animate the outer and inner ring separately. They are created on every layout
+  // so indices stay put, but only drawn on a ring - elsewhere they just get a harmless split point.
+  const uint8_t ring = LED_LAYOUT_BIT(LED_LAYOUT_RING);
+  const uint16_t outer = layout == LED_LAYOUT_RING ? configuration.ledRingOuterSize : n / 2;
+  const float ringIncrement = 255.0 / (float)n * 2.0;
+  addMode(new CSlavaUkrainiRingMode(n, outer, "Slava Ukraini"), ring);
+  addMode(new CRingPaletteMode(n, outer, "Slava Ukraini 2", SlavaUkraini_p, ringIncrement), ring);
+  addMode(new CColorSplitMode(n, outer, "Dual Ring"), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Party Colors", PartyColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Heat Colors", HeatColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Rainbow Colors", RainbowColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Cloud Colors", CloudColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Forest Colors", ForestColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Ocean Colors", OceanColors_p, ringIncrement), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Lava Colors", LavaColors_p, ringIncrement), ring);
+  addMode(new CHoneyOrangeMode(n, outer, "Honey Amber"), ring);
+  addMode(new CRingPaletteMode(n, outer, "Ring Pride", Pride_p, ringIncrement), ring);
 }
 
 void CLEDManager::handleChargingInput() {
@@ -227,7 +341,7 @@ void CLEDManager::renderCurrentMode() {
   }
 
   modes[configuration.ledMode]->draw(leds);
-  FastLED.show(255 * CONFIG_getLedBrightness());
+  show();
 }
 
 void CLEDManager::renderChargingMode() {
@@ -236,6 +350,22 @@ void CLEDManager::renderChargingMode() {
   }
 
   chargingMode->draw(leds);
+  show();
+}
+
+void CLEDManager::show() {
+  if (hwLeds != leds) {
+    for (uint16_t i = 0; i < renderSize; i++) {
+      #if FASTLED_HAS_CHANNELS
+        hwLeds[i] = leds[i];
+      #else
+        hwLeds[i] = toWireOrder(leds[i], colorOrder);
+      #endif
+    }
+    if (mirror) {
+      ::memcpy(hwLeds + renderSize, hwLeds, renderSize * sizeof(CRGB));
+    }
+  }
   FastLED.show(255 * CONFIG_getLedBrightness());
 }
 
@@ -250,20 +380,18 @@ void CLEDManager::updateModeCycling() {
 
   tsCycleMs = millis();
 
-  if (configuration.cycleModesCount > 0) {
+  // Step to the next mode that fits this layout, from the custom list if it has any such mode
+  bool found = false;
+  for (uint8_t i = 0; i < configuration.cycleModesCount && !found; i++) {
     cycleIndex = (cycleIndex + 1) % configuration.cycleModesCount;
-    uint8_t nextMode = configuration.cycleModesList[cycleIndex];
-    if (nextMode < modes.size()) {
-      configuration.ledMode = nextMode;
-    } else {
-      cycleIndex = 0;
-      configuration.ledMode = configuration.cycleModesList[0];
+    if (isModeAvailable(configuration.cycleModesList[cycleIndex])) {
+      configuration.ledMode = configuration.cycleModesList[cycleIndex];
+      found = true;
     }
-  } else {
-    configuration.ledMode++;
-    if (configuration.ledMode > modes.size() - 1) {
-      configuration.ledMode = 0;
-    }
+  }
+  for (size_t i = 0; i < modes.size() && !found; i++) {
+    configuration.ledMode = (configuration.ledMode + 1) % modes.size();
+    found = isModeAvailable(configuration.ledMode);
   }
 
   if (onModeChange) {

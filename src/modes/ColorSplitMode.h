@@ -10,8 +10,9 @@ private:
   //const TProgmemRGBPalette16& palette1, palette2;
   const TBlendType blendType;
   const unsigned long delay;
+  const uint16_t splitAt;
 
 public:
-	CColorSplitMode(const uint16_t numLeds, const String name);
+	CColorSplitMode(const uint16_t numLeds, const uint16_t splitAt, const String name);
   virtual void draw(CRGB *leds);
 };

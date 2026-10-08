@@ -34,6 +34,7 @@ private:
   unsigned long tsAPReboot;
 
   std::vector<CBaseMode*> *modes;
+  uint8_t ledLayout;  // Layout the running modes were set up for
   
   unsigned long lastModeChangeMs = 0;
   
@@ -50,6 +51,7 @@ private:
   void handleWifi(AsyncWebServerRequest *request);
 
   void handleDevice(AsyncWebServerRequest *request);
+  void handleLED(AsyncWebServerRequest *request);
   void handleFactoryReset(AsyncWebServerRequest *request);
   void handleReboot(AsyncWebServerRequest *request);
   void handleStyleCSS(AsyncWebServerRequest *request);
@@ -64,7 +66,9 @@ private:
 
   bool isApMode();
 
-  bool updateConfigFromJson(JsonDocument jsonObj);
+  bool isModeSelectable(uint8_t index, uint8_t layout);
+  // allowHardware: also apply LED hardware fields, which only take effect after a save and reboot
+  bool updateConfigFromJson(JsonDocument jsonObj, bool allowHardware, String *error = nullptr);
 
   CDevice *device;
 
@@ -75,7 +79,7 @@ public:
   virtual const bool isRebootNeeded() { return rebootNeeded; }
   virtual const bool isJobDone() { return !isApMode(); }
 
-  void setModes(std::vector<CBaseMode*> *modes) { this->modes = modes; }
+  void setModes(std::vector<CBaseMode*> *modes, uint8_t layout) { this->modes = modes; this->ledLayout = layout; }
   void updateModeChangeTime() { lastModeChangeMs = millis(); }
 
   void setDevice(CDevice* device) { this->device = device; };

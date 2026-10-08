@@ -77,7 +77,7 @@ void setup() {
   });
   ledManager->setup();
 
-  wifiManager->setModes(ledManager->getModes());
+  wifiManager->setModes(ledManager->getModes(), ledManager->getLayout());
   wifiManager->updateModeChangeTime();
 
   Log.noticeln("Setup completed!");

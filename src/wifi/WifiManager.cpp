@@ -106,7 +106,7 @@ const char* getTzString(long gmtOffset_sec) {
 }
 
 CWifiManager::CWifiManager()
-:rebootNeeded(false), wifiRetries(0), device(nullptr) {
+:rebootNeeded(false), wifiRetries(0), modes(nullptr), ledLayout(LED_LAYOUT_SINGLE), device(nullptr) {
 
   deviceJson["dev_name"] = configuration.name;
   deviceJson["version"] = VERSION;
@@ -208,6 +208,7 @@ void CWifiManager::listen() {
 
   server->on("/wifi", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleWifi(request); });
   server->on("/device", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleDevice(request); });
+  server->on("/led", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleLED(request); });
   //
   server->on("/factory_reset", HTTP_POST, [this](AsyncWebServerRequest *request) { handleFactoryReset(request); });
   server->on("/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) { handleReboot(request); });
@@ -226,7 +227,8 @@ void CWifiManager::listen() {
     handleRestAPI_Config(request);
   });
   AsyncCallbackJsonWebHandler* configHandler = new AsyncCallbackJsonWebHandler("/config", [this](AsyncWebServerRequest *request, JsonVariant &json) {
-    bool success = this->updateConfigFromJson(json.as<JsonObject>());
+    String error;
+    bool success = this->updateConfigFromJson(json.as<JsonObject>(), true, &error);
     if (success) {
       EEPROM_saveConfig();
       
@@ -237,8 +239,8 @@ void CWifiManager::listen() {
       tMillis = millis();
       rebootNeeded = true;
     } else {
-      AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8", 64);
-      response->print("ERROR: Invalid configuration data");
+      AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8", 128);
+      response->printf("ERROR: Invalid configuration data: %s", error.c_str());
       response->setCode(400);
       request->send(response);
     }
@@ -249,7 +251,8 @@ void CWifiManager::listen() {
     handleRestAPI_LED(request);
   });
   AsyncCallbackJsonWebHandler* handler = new AsyncCallbackJsonWebHandler("/api", [this](AsyncWebServerRequest *request, JsonVariant &json) {
-    bool success = this->updateConfigFromJson(json.as<JsonObject>());
+    // Live changes only - LED hardware fields need a reboot, so they go through /config or /led
+    bool success = this->updateConfigFromJson(json.as<JsonObject>(), false);
     if (success) {
       handleRestAPI_LED(request);
     } else {
@@ -406,22 +409,10 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
 
   if (request->method() == HTTP_POST) {
 
-    // LED Settings
-    uint8_t ledType = atoi(request->arg("ledType").c_str());
-    if (ledType < 13) { // We have 13 LED types
-      if (configuration.ledType != ledType) {
-        Log.noticeln("ledType: '%i'", ledType);
-        configuration.ledType = ledType;
-        tMillis = millis();
-        rebootNeeded = true;
-      }
-    }
-    
-    if (modes != NULL) {
-      uint8_t ledMode = atoi(request->arg("ledMode").c_str());
-      if (ledMode<modes->size()) {
-        configuration.ledMode = ledMode;
-      }
+    // LED Settings (strip hardware is set at /led)
+    uint8_t ledMode = atoi(request->arg("ledMode").c_str());
+    if (isModeSelectable(ledMode, ledLayout)) {
+      configuration.ledMode = ledMode;
     }
 
     float ledBrightness = atof(request->arg("ledBrightness").c_str())/100.0;
@@ -436,14 +427,6 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
     Log.noticeln("ledBrightness: '%D'", configuration.ledBrightness);
     Log.noticeln("ledDelayMs: '%lu'", configuration.ledDelayMs);
     Log.noticeln("ledCycleModeMs: '%lu'", configuration.ledCycleModeMs);
-
-    uint16_t ledStripSize = atol(request->arg("ledStripSize").c_str());
-    if (configuration.ledStripSize != ledStripSize) {
-      Log.noticeln("ledStripSize: '%i'", ledStripSize);
-      configuration.ledStripSize = ledStripSize;
-      tMillis = millis();
-      rebootNeeded = true;
-    }
 
     // Power-save settings
     float psLedBrightness = atof(request->arg("psLedBrightness").c_str())/100.0;
@@ -488,7 +471,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
           
           if (modeStr.length() > 0) {
             uint8_t modeIndex = atoi(modeStr.c_str());
-            if (modeIndex < modes->size()) {
+            if (isModeSelectable(modeIndex, ledLayout)) {
               configuration.cycleModesList[count++] = modeIndex;
               Log.verboseln("Added mode %d to cycle list", modeIndex);
             }
@@ -645,11 +628,122 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
     response->printf_P(htmlDevice,
       CONFIG_getChipModel().c_str(), CONFIG_getChipRevision(),
       CONFIG_getFlashChipSize() / (1024 * 1024), WiFi.macAddress().c_str(),
-      configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str());
+      configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str(), configuration.name);
     printHTMLBottom(response);
     request->send(response);
   }
   intLEDOff();
+}
+
+static void appendOption(String &out, const String &value, const String &label, bool selected) {
+  out += "<option value='";
+  out += value;
+  out += selected ? "' selected>" : "'>";
+  out += label;
+  out += "</option>";
+}
+
+static String pinOptions(uint8_t selectedPin) {
+  String options;
+  for (uint8_t i = 0; i < LED_PIN_COUNT; i++) {
+    if (CONFIG_isValidLedPin(LED_PINS[i])) {
+      appendOption(options, String(LED_PINS[i]), String("GPIO ") + LED_PINS[i], LED_PINS[i] == selectedPin);
+    }
+  }
+  return options;
+}
+
+// One line description of the configured LED hardware, e.g. "Ring light: 267 LEDs (141 outer, 126 inner) on GPIO 12"
+static String ledHardwareSummary() {
+  String s = String(LED_LAYOUT_LABELS[configuration.ledLayout]) + ": ";
+  switch (configuration.ledLayout) {
+    case LED_LAYOUT_DUAL:
+      if (configuration.ledMirror) {
+        s += String(configuration.ledStripSize) + " LEDs on GPIO " + configuration.ledPin + ", mirrored on GPIO " + configuration.ledPin2;
+      } else {
+        s += String(configuration.ledStripSize) + " + " + configuration.ledStripSize2 + " LEDs on GPIO " + configuration.ledPin + " and GPIO " + configuration.ledPin2;
+      }
+      break;
+    case LED_LAYOUT_RING:
+      s += String(configuration.ledStripSize) + " LEDs (" + configuration.ledRingOuterSize + " outer, "
+        + (configuration.ledStripSize - configuration.ledRingOuterSize) + " inner) on GPIO " + configuration.ledPin;
+      break;
+    default:
+      s += String(configuration.ledStripSize) + " LEDs on GPIO " + configuration.ledPin;
+  }
+  s += String(", ") + LED_TYPE_NAMES[configuration.ledType] + " " + CONFIG_ledColorOrderName(configuration.ledColorOrder);
+  return s;
+}
+
+void CWifiManager::handleLED(AsyncWebServerRequest *request) {
+  Log.traceln("handleLED: %s", request->methodToString());
+  intLEDOn();
+
+  if (request->method() == HTTP_POST) {
+    // Run the form through the same validation as an imported configuration
+    JsonDocument json;
+    const char *stringFields[] = {"ledLayout", "ledColorOrder"};
+    for (const char *field : stringFields) {
+      if (request->hasArg(field)) {
+        json[field] = request->arg(field);
+      }
+    }
+    const char *numberFields[] = {"ledType", "ledPin", "ledPin2", "ledStripSize", "ledStripSize2", "ledRingOuterSize"};
+    for (const char *field : numberFields) {
+      if (request->hasArg(field)) {
+        json[field] = request->arg(field).toInt();
+      }
+    }
+    if (request->arg("ledLayout") == LED_LAYOUT_IDS[LED_LAYOUT_DUAL]) {
+      json["ledMirror"] = request->hasArg("ledMirror");
+    }
+
+    String error;
+    if (updateConfigFromJson(json, true, &error)) {
+      EEPROM_saveConfig();
+      AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8", 64);
+      response->print("OK");
+      request->send(response);
+      tMillis = millis();
+      rebootNeeded = true;
+    } else {
+      AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8", 128);
+      response->setCode(400);
+      response->print(error);
+      request->send(response);
+    }
+  } else {
+    String layoutOptions;
+    for (uint8_t i = 0; i < LED_LAYOUT_COUNT; i++) {
+      appendOption(layoutOptions, LED_LAYOUT_IDS[i], LED_LAYOUT_LABELS[i], i == configuration.ledLayout);
+    }
+    String typeOptions;
+    for (uint8_t i = 0; i < LED_TYPE_COUNT; i++) {
+      appendOption(typeOptions, String(i), LED_TYPE_NAMES[i], i == configuration.ledType);
+    }
+    String orderOptions;
+    for (uint8_t i = 0; i < LED_COLOR_ORDER_COUNT; i++) {
+      appendOption(orderOptions, LED_COLOR_ORDERS[i].name, LED_COLOR_ORDERS[i].name, LED_COLOR_ORDERS[i].value == configuration.ledColorOrder);
+    }
+
+    AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8", 8192);
+    printHTMLTop(response);
+    response->printf_P(htmlLed,
+      ledHardwareSummary().c_str(),
+      layoutOptions.c_str(), typeOptions.c_str(), orderOptions.c_str(),
+      pinOptions(configuration.ledPin).c_str(), LED_MAX_COUNT, configuration.ledStripSize,
+      configuration.ledRingOuterSize,
+      configuration.ledMirror ? "checked" : "",
+      pinOptions(configuration.ledPin2).c_str(), LED_MAX_COUNT, configuration.ledStripSize2);
+    printHTMLBottom(response);
+    request->send(response);
+  }
+
+  intLEDOff();
+}
+
+bool CWifiManager::isModeSelectable(uint8_t index, uint8_t layout) {
+  return modes != NULL && index < modes->size() && (*modes)[index]->supportsLayout(layout);
 }
 
 void CWifiManager::handleFactoryReset(AsyncWebServerRequest *request) {
@@ -759,6 +853,13 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   configJson["ledBrightness"] = configuration.ledBrightness;
   configJson["ledMode"] = configuration.ledMode;
   configJson["ledType"] = configuration.ledType;
+  configJson["ledLayout"] = LED_LAYOUT_IDS[configuration.ledLayout];
+  configJson["ledPin"] = configuration.ledPin;
+  configJson["ledPin2"] = configuration.ledPin2;
+  configJson["ledColorOrder"] = CONFIG_ledColorOrderName(configuration.ledColorOrder);
+  configJson["ledStripSize2"] = configuration.ledStripSize2;
+  configJson["ledRingOuterSize"] = configuration.ledRingOuterSize;
+  configJson["ledMirror"] = (bool)configuration.ledMirror;
   configJson["ledDelayMs"] = configuration.ledDelayMs;
   configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
   configJson["ledStripSize"] = configuration.ledStripSize;
@@ -831,17 +932,12 @@ void CWifiManager::printHTMLBottom(Print *p) {
 
 void CWifiManager::printHTMLMain(Print *p) {
 
-  String typeOptions = "";
-  const char* ledTypes[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852", "WS2811"};
-  const uint8_t numLedTypes = sizeof(ledTypes) / sizeof(ledTypes[0]);
-  for (uint8_t i = 0; i < numLedTypes; i++) {
-    typeOptions += String("<option") + String(i == configuration.ledType ? " selected" : "") + String(" value='") + String(i) + String("'>") + String(ledTypes[i]) + String("</option>");
-  }
-
+  // Only modes that fit the running layout are offered
   String modeOptions = "";
   String currentModeName = "Unknown";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
+      if (!isModeSelectable(i, ledLayout)) continue;
       modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
     }
     if (configuration.ledMode < modes->size()) {
@@ -876,7 +972,8 @@ void CWifiManager::printHTMLMain(Print *p) {
   String availableModesStr = "";
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
-      if (i > 0) availableModesStr += ", ";
+      if (!isModeSelectable(i, ledLayout)) continue;
+      if (availableModesStr.length() > 0) availableModesStr += ", ";
       availableModesStr += String(i) + "=" + (*modes)[i]->getName();
     }
   }
@@ -896,8 +993,7 @@ void CWifiManager::printHTMLMain(Print *p) {
     currentModeName.c_str(),
     timeRemaining.c_str(),
     currentTimeStr.c_str(),
-    configuration.ledStripSize,
-    typeOptions.c_str(),
+    ledHardwareSummary().c_str(),
     modeOptions.c_str(), 
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
@@ -913,156 +1009,187 @@ void CWifiManager::printHTMLMain(Print *p) {
 
 }
 
-bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj) {
+bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware, String *error) {
+
+  // Work on a copy so a rejected request leaves the running configuration untouched
+  configuration_t c = configuration;
+  bool networkChanged = false;
 
   // Device information
   if (!jsonObj["name"].isNull()) {
     Log.traceln("Setting 'name' to %s", jsonObj["name"].as<const char*>());
-    strncpy(configuration.name, jsonObj["name"].as<const char*>(), sizeof(configuration.name) - 1);
-    configuration.name[sizeof(configuration.name) - 1] = '\0';
+    strncpy(c.name, jsonObj["name"].as<const char*>(), sizeof(c.name) - 1);
+    c.name[sizeof(c.name) - 1] = '\0';
   }
 
   if (!jsonObj["ledEnabled"].isNull()) {
-    configuration.ledEnabled = jsonObj["ledEnabled"].as<bool>();
-    Log.traceln("Setting 'ledEnabled' to %d", configuration.ledEnabled);
+    c.ledEnabled = jsonObj["ledEnabled"].as<bool>();
+    Log.traceln("Setting 'ledEnabled' to %d", c.ledEnabled);
   }
 
   #ifdef WIFI
   // WiFi settings
   if (!jsonObj["wifiSsid"].isNull()) {
-    strncpy(configuration.wifiSsid, jsonObj["wifiSsid"].as<const char*>(), sizeof(configuration.wifiSsid) - 1);
-    configuration.wifiSsid[sizeof(configuration.wifiSsid) - 1] = '\0';
-    Log.traceln("Setting 'wifiSsid' to %s", configuration.wifiSsid);
-    rebootNeeded = true;
+    strncpy(c.wifiSsid, jsonObj["wifiSsid"].as<const char*>(), sizeof(c.wifiSsid) - 1);
+    c.wifiSsid[sizeof(c.wifiSsid) - 1] = '\0';
+    Log.traceln("Setting 'wifiSsid' to %s", c.wifiSsid);
+    networkChanged = true;
   }
 
   if (!jsonObj["wifiPassword"].isNull()) {
-    strncpy(configuration.wifiPassword, jsonObj["wifiPassword"].as<const char*>(), sizeof(configuration.wifiPassword) - 1);
-    configuration.wifiPassword[sizeof(configuration.wifiPassword) - 1] = '\0';
+    strncpy(c.wifiPassword, jsonObj["wifiPassword"].as<const char*>(), sizeof(c.wifiPassword) - 1);
+    c.wifiPassword[sizeof(c.wifiPassword) - 1] = '\0';
     Log.traceln("Setting 'wifiPassword'");
-    rebootNeeded = true;
+    networkChanged = true;
   }
 
   if (!jsonObj["wifiPower"].isNull()) {
-    configuration.wifiPower = jsonObj["wifiPower"].as<int8_t>();
-    Log.traceln("Setting 'wifiPower' to %d", configuration.wifiPower);
-    rebootNeeded = true;
+    c.wifiPower = jsonObj["wifiPower"].as<int8_t>();
+    Log.traceln("Setting 'wifiPower' to %d", c.wifiPower);
+    networkChanged = true;
   }
 
   // NTP settings
   if (!jsonObj["ntpServer"].isNull()) {
-    strncpy(configuration.ntpServer, jsonObj["ntpServer"].as<const char*>(), sizeof(configuration.ntpServer) - 1);
-    configuration.ntpServer[sizeof(configuration.ntpServer) - 1] = '\0';
-    Log.traceln("Setting 'ntpServer' to %s", configuration.ntpServer);
-    rebootNeeded = true;
+    strncpy(c.ntpServer, jsonObj["ntpServer"].as<const char*>(), sizeof(c.ntpServer) - 1);
+    c.ntpServer[sizeof(c.ntpServer) - 1] = '\0';
+    Log.traceln("Setting 'ntpServer' to %s", c.ntpServer);
+    networkChanged = true;
   }
 
   if (!jsonObj["gmtOffset_sec"].isNull()) {
-    configuration.gmtOffset_sec = jsonObj["gmtOffset_sec"].as<long>();
-    Log.traceln("Setting 'gmtOffset_sec' to %l", configuration.gmtOffset_sec);
-    rebootNeeded = true;
+    c.gmtOffset_sec = jsonObj["gmtOffset_sec"].as<long>();
+    Log.traceln("Setting 'gmtOffset_sec' to %l", c.gmtOffset_sec);
+    networkChanged = true;
   }
 
   if (!jsonObj["daylightOffset_sec"].isNull()) {
-    configuration.daylightOffset_sec = jsonObj["daylightOffset_sec"].as<int>();
-    Log.traceln("Setting 'daylightOffset_sec' to %d", configuration.daylightOffset_sec);
-    rebootNeeded = true;
+    c.daylightOffset_sec = jsonObj["daylightOffset_sec"].as<int>();
+    Log.traceln("Setting 'daylightOffset_sec' to %d", c.daylightOffset_sec);
+    networkChanged = true;
   }
   #endif
 
   #ifdef LED
+  // LED hardware - applied as a whole after a save and reboot, so validated as a whole
+  if (allowHardware) {
+    if (!jsonObj["ledLayout"].isNull()) {
+      int layout = jsonObj["ledLayout"].is<const char*>()
+        ? CONFIG_ledLayoutFromName(jsonObj["ledLayout"].as<const char*>())
+        : jsonObj["ledLayout"].as<int>();
+      if (layout < 0 || layout >= LED_LAYOUT_COUNT) {
+        if (error) *error = "unknown ledLayout";
+        return false;
+      }
+      c.ledLayout = layout;
+    }
+
+    if (!jsonObj["ledColorOrder"].isNull()) {
+      int order = CONFIG_ledColorOrderFromName(jsonObj["ledColorOrder"].as<const char*>());
+      if (order < 0) {
+        if (error) *error = "unknown ledColorOrder";
+        return false;
+      }
+      c.ledColorOrder = order;
+    }
+
+    if (!jsonObj["ledType"].isNull()) c.ledType = jsonObj["ledType"].as<uint8_t>();
+    if (!jsonObj["ledPin"].isNull()) c.ledPin = jsonObj["ledPin"].as<uint8_t>();
+    if (!jsonObj["ledPin2"].isNull()) c.ledPin2 = jsonObj["ledPin2"].as<uint8_t>();
+    if (!jsonObj["ledStripSize"].isNull()) c.ledStripSize = jsonObj["ledStripSize"].as<uint16_t>();
+    if (!jsonObj["ledStripSize2"].isNull()) c.ledStripSize2 = jsonObj["ledStripSize2"].as<uint16_t>();
+    if (!jsonObj["ledRingOuterSize"].isNull()) c.ledRingOuterSize = jsonObj["ledRingOuterSize"].as<uint16_t>();
+    if (!jsonObj["ledMirror"].isNull()) c.ledMirror = jsonObj["ledMirror"].as<bool>();
+
+    const char *ledError = CONFIG_checkLedHardware(c);
+    if (ledError) {
+      Log.warningln("Rejected LED hardware configuration: %s", ledError);
+      if (error) *error = ledError;
+      return false;
+    }
+  }
+
+  // Modes must fit the layout they will run on: the requested one if this request changes it
+  const uint8_t modeLayout = allowHardware ? c.ledLayout : ledLayout;
+
   // LED settings
   if (!jsonObj["ledBrightness"].isNull()) {
     float brightness = jsonObj["ledBrightness"].as<float>();
     if (brightness >= 0.0 && brightness <= 1.0) {
-      configuration.ledBrightness = brightness;
-      Log.traceln("Setting 'ledBrightness' to %D", configuration.ledBrightness);
+      c.ledBrightness = brightness;
+      Log.traceln("Setting 'ledBrightness' to %D", c.ledBrightness);
     }
   }
 
   if (!jsonObj["ledMode"].isNull()) {
     uint8_t mode = jsonObj["ledMode"].as<uint8_t>();
-    if (modes != NULL && mode < modes->size()) {
-      configuration.ledMode = mode;
-      Log.traceln("Setting 'ledMode' to %d", configuration.ledMode);
-    }
-  }
-
-  if (!jsonObj["ledType"].isNull()) {
-    uint8_t type = jsonObj["ledType"].as<uint8_t>();
-    if (type < 13) { // We have 13 LED types
-      if (configuration.ledType != type) {
-        configuration.ledType = type;
-        Log.traceln("Setting 'ledType' to %d", configuration.ledType);
-        rebootNeeded = true;
-      }
+    if (isModeSelectable(mode, modeLayout)) {
+      c.ledMode = mode;
+      Log.traceln("Setting 'ledMode' to %d", c.ledMode);
     }
   }
 
   if (!jsonObj["ledDelayMs"].isNull()) {
-    configuration.ledDelayMs = jsonObj["ledDelayMs"].as<unsigned long>();
-    Log.traceln("Setting 'ledDelayMs' to %l", configuration.ledDelayMs);
+    c.ledDelayMs = jsonObj["ledDelayMs"].as<unsigned long>();
+    Log.traceln("Setting 'ledDelayMs' to %l", c.ledDelayMs);
   }
 
   if (!jsonObj["ledCycleModeMs"].isNull()) {
-    configuration.ledCycleModeMs = jsonObj["ledCycleModeMs"].as<unsigned long>();
-    Log.traceln("Setting 'ledCycleModeMs' to %l", configuration.ledCycleModeMs);
-  }
-
-  if (!jsonObj["ledStripSize"].isNull()) {
-    configuration.ledStripSize = jsonObj["ledStripSize"].as<uint16_t>();
-    Log.traceln("Setting 'ledStripSize' to %d", configuration.ledStripSize);
+    c.ledCycleModeMs = jsonObj["ledCycleModeMs"].as<unsigned long>();
+    Log.traceln("Setting 'ledCycleModeMs' to %l", c.ledCycleModeMs);
   }
 
   if (!jsonObj["psLedBrightness"].isNull()) {
     float psBrightness = jsonObj["psLedBrightness"].as<float>();
     if (psBrightness >= 0.0 && psBrightness <= 1.0) {
-      configuration.psLedBrightness = psBrightness;
-      Log.traceln("Setting 'psLedBrightness' to %D", configuration.psLedBrightness);
+      c.psLedBrightness = psBrightness;
+      Log.traceln("Setting 'psLedBrightness' to %D", c.psLedBrightness);
     }
   }
 
   if (!jsonObj["psStartHour"].isNull()) {
     int8_t hour = jsonObj["psStartHour"].as<int8_t>();
     if (hour >= 0 && hour <= 23) {
-      configuration.psStartHour = hour;
-      Log.traceln("Setting 'psStartHour' to %d", configuration.psStartHour);
+      c.psStartHour = hour;
+      Log.traceln("Setting 'psStartHour' to %d", c.psStartHour);
     }
   }
 
   if (!jsonObj["psEndHour"].isNull()) {
     int8_t hour = jsonObj["psEndHour"].as<int8_t>();
     if (hour >= 0 && hour <= 23) {
-      configuration.psEndHour = hour;
-      Log.traceln("Setting 'psEndHour' to %d", configuration.psEndHour);
+      c.psEndHour = hour;
+      Log.traceln("Setting 'psEndHour' to %d", c.psEndHour);
     }
   }
 
-  // Mode cycling configuration
+  // Mode cycling configuration - a list wins over a bare count, and modes that don't fit are dropped
   if (!jsonObj["cycleModesList"].isNull() && jsonObj["cycleModesList"].is<JsonArray>()) {
     JsonArray modeList = jsonObj["cycleModesList"].as<JsonArray>();
-    uint8_t count = min((size_t)32, modeList.size());
-    configuration.cycleModesCount = count;
-    
-    for (uint8_t i = 0; i < count; i++) {
-      uint8_t modeIndex = modeList[i].as<uint8_t>();
-      if (modes != NULL && modeIndex < modes->size()) {
-        configuration.cycleModesList[i] = modeIndex;
-      } else {
-        configuration.cycleModesList[i] = 0;
+    uint8_t count = 0;
+    for (JsonVariant v : modeList) {
+      uint8_t modeIndex = v.as<uint8_t>();
+      if (count < 32 && isModeSelectable(modeIndex, modeLayout)) {
+        c.cycleModesList[count++] = modeIndex;
       }
     }
-    Log.traceln("Setting 'cycleModesList' with %d modes", configuration.cycleModesCount);
-  }
-
-  if (!jsonObj["cycleModesCount"].isNull()) {
+    c.cycleModesCount = count;
+    Log.traceln("Setting 'cycleModesList' with %d modes", c.cycleModesCount);
+  } else if (!jsonObj["cycleModesCount"].isNull()) {
     uint8_t count = jsonObj["cycleModesCount"].as<uint8_t>();
     if (count <= 32) {
-      configuration.cycleModesCount = count;
-      Log.traceln("Setting 'cycleModesCount' to %d", configuration.cycleModesCount);
+      c.cycleModesCount = count;
+      Log.traceln("Setting 'cycleModesCount' to %d", c.cycleModesCount);
     }
   }
+  #endif
 
+  configuration = c;
+  if (networkChanged) {
+    rebootNeeded = true;
+  }
+
+  #ifdef LED
   // Update LED brightness calculation if power-save settings changed
   CONFIG_getLedBrightness(true);
   #endif

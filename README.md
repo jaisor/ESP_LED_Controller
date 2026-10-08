@@ -8,7 +8,9 @@
 * WiFi connected and managed
     * creates a default AP, listening to http://192.168.4.1
     * capable of joining existing 2.4GHz networks
-    * serves a webpage for managing LED - strip size, mode, brightness
+    * serves a webpage for managing LED - mode, brightness, cycling and power-save hours
+    * LED setup page (`/led`) - layout (single strip, dual strip, ring light), LED count, data pin(s), chipset and color order
+    * configuration export and import as a JSON file on the Device page
 * Firmware update over WiFi - new `firmware.bin` file can be uploaded at `/update` after the IP address
 
 ## Components
@@ -43,9 +45,16 @@ Providing power to both start and ends of the strips reduces voltage sag and ens
 ![Wiring Closeup](img/WiringCloseup.jpg)
 ![Wiring Complete](img/WiringComplete.jpg)
 
-By default in `Configuration.h` the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed.
+By default the LEDs data is connected to pin 12 on the ESP, but most other GPIO pins can be used if needed - pick the pin on the LED setup page.
 
-__LED_PIN_STRIP = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
+__LED data pin = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
+
+After first boot, open `http://<device_ip>/led` (or ⚙️ → LED Setup) and set:
+* Layout: __Ring light__
+* Total LEDs: __267__, outer ring LEDs: __141__
+* Chipset __WS2812B__, color order __GRB__
+
+The ring modes (Slava Ukraini, Dual Ring, Ring ... Colors, Honey Amber, Ring Pride) only show up with the ring light layout.
 
 ![ESP32 pins](img/ESP32_pins.png)
 
@@ -61,7 +70,9 @@ Enclosure STL files. Print in PLA, PETG or any other hard filament.
 
 ## Configuration.h
 
-This file configures various default settings, like:
-* ESP pin used to drive the LED data (defaults are referenced below)
+This file configures compile-time features and the defaults used after a factory reset, like:
+* default LED data pin(s) and the list of GPIOs offered on the LED setup page
 * WiFi AP name/password
-* LED strip type, size, default brightness
+* default LED layout, strip size, color order and brightness
+
+Everything LED-hardware related can be changed at runtime on the LED setup page.
