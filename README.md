@@ -91,3 +91,15 @@ Enable it on the Device page by setting the MQTT server (and username/password i
 | `.../json` | device → | telemetry (IP, RSSI, uptime, mode, ...), every 5 minutes, retained |
 
 With Home Assistant discovery enabled the device publishes its entities to `homeassistant/light/<device id>/config` and `homeassistant/sensor/<device id>_*/config`, and re-publishes them when Home Assistant restarts or the mode list changes.
+
+## Migrating to the larger app partitions
+
+Firmware for the `esp32`, `esp32c3` and `esp32s3` environments is built for `min_spiffs.csv` (two 1.9MB app slots); it no longer fits the 1.25MB slots of the framework's `default.csv` that older builds used. A normal OTA update can't fix that - it never rewrites the partition table - so `/update` on an older device rejects the new `firmware.bin` (safely, nothing changes). Flash over USB where you can; for devices that are hard to reach there is a one-off migrator firmware:
+
+1. Build it for the board: `pio run -e esp32_migrator` (or `esp32c3_migrator`, `esp32s3_migrator`). The Xiao ESP32-S3 doesn't need it - its 8MB layout didn't change.
+2. Upload `.pio/build/<env>_migrator/firmware.bin` through the device's existing `/update` page.
+3. The migrator joins the saved WiFi network (or opens an access point `<name>_<chip id>_migrator`, password `password123`, at http://192.168.4.1) and shows the current partition table. Settings are only read, never changed.
+4. Click **Migrate partition table**. It writes `min_spiffs.csv` to the partition table, verifies it and reboots into itself.
+5. Upload the normal `firmware.bin` on the migrator's page. The controller comes back with its settings.
+
+The migrator only writes the table when it recognizes `default.csv`, refuses on flash encryption or secure boot, and puts the old table back if the write doesn't verify. The write itself takes a fraction of a second, but a power cut during it leaves a board that needs USB - so try it on a board within USB reach first.

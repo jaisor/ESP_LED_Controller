@@ -12,6 +12,8 @@ pio device monitor -b 115200         # 460800 for esp32c3 / esp32s3 envs
 
 Environments in [platformio.ini](platformio.ini): `esp32`, `esp8266`, `esp32c3`, `esp32s3`, `seeed_xiao_esp32s3`. CI ([.github/workflows/main.yml](.github/workflows/main.yml)) builds `esp32c3`, `esp32`, `esp8266` — and only on pushes to the feature branches, not `main`. There are no unit tests (`test/` is empty); verification means building every affected env and testing on hardware.
 
+`*_migrator` envs build [src/migrator/](src/migrator/) instead of the controller (`build_src_filter`; every other env excludes `migrator/`): a one-off firmware that switches an ESP32/C3/S3 from `default.csv` to `min_spiffs.csv` over the air, see README. It is built against `default.csv` and must stay under its 1.25MB slot. `min_spiffs_table.h` is the framework's `gen_esp32part.py` output - regenerate it rather than editing bytes.
+
 `buildscript_versioning.py` runs pre-build and rewrites [include/version.h](include/version.h) (`SEMVER` env var, else `dev.<timestamp>`). That file is tracked but changes on every build — don't commit it as part of unrelated changes.
 
 ## Architecture
