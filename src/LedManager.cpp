@@ -15,6 +15,10 @@
 #include "modes/PixelSeparatorMode.h"
 #include "modes/CustomMode.h"
 
+#if FASTLED_HAS_CHANNELS && FASTLED_RMT5
+  #include "platforms/esp/32/drivers/rmt/rmt_5/rmt_memory_manager.h"
+#endif
+
 const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
 {
     0x253B80,   // PayPal Dark Blue
@@ -246,6 +250,15 @@ void CLEDManager::loop() {
 }
 
 void CLEDManager::initFastLED() {
+  #if FASTLED_HAS_CHANNELS && FASTLED_RMT5
+    // RMT streams each frame through a small ping-pong buffer that an interrupt refills. With FastLED's
+    // default 2-3 memory blocks the refill is due every ~80us, and WiFi interrupts can hold it off for
+    // 50-120us - the transmission then runs on stale symbols and the rest of the frame glitches. Give
+    // each strip an equal share of all TX memory instead (ESP32: 8 blocks, ~320us for one strip).
+    size_t blocks = SOC_RMT_TX_CANDIDATES_PER_GROUP / (layout == LED_LAYOUT_DUAL ? 2 : 1);
+    fl::RmtMemoryManager::instance().setMemoryBlockStrategy(blocks, blocks);
+    Log.infoln("RMT buffer: %d memory blocks per strip", blocks);
+  #endif
   addStrip(configuration.ledPin, hwLeds, configuration.ledStripSize);
   if (layout == LED_LAYOUT_DUAL) {
     addStrip(configuration.ledPin2, hwLeds + configuration.ledStripSize, hwSize - configuration.ledStripSize);
