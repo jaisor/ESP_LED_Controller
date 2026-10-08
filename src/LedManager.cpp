@@ -257,6 +257,10 @@ void CLEDManager::addStrip(uint8_t pin, CRGB *data, uint16_t count) {
 #if FASTLED_HAS_CHANNELS
   fl::ChannelOptions options;
   options.mCorrection = TypicalLEDStrip;
+  // Left on AUTO, classic ESP32 picks the I2S engine, which needs ~400 bytes of contiguous DMA RAM per
+  // byte of LED data (150KB for 128 LEDs) - its allocation fails and no frame is ever sent. RMT streams
+  // through small buffers and is what addLeds<>() used on all three chips.
+  options.mBus = fl::Bus::RMT;
   fl::ChannelConfig config(clocklessChipset(configuration.ledType, pin), fl::span<CRGB>(data, count), (EOrder)colorOrder, options);
   if (FastLED.add(config) == nullptr) {
     Log.errorln("Unable to drive LEDs on GPIO %d", pin);
