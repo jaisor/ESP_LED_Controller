@@ -69,6 +69,19 @@
 
     // Web server
     #define WEB_SERVER_PORT 80
+
+    // MQTT, disabled until a server is set on the Device page. Topics live under <MQTT_TOPIC>/<device id>.
+    #define MQTT_PORT 1883
+    #define MQTT_TOPIC "esp_led"
+    #define MQTT_DISCOVERY_PREFIX "homeassistant"   // Home Assistant's default discovery prefix
+    #define MQTT_RECONNECT_MS 60000     // Connecting blocks the loop while the broker is unreachable, so retry sparingly
+    #define MQTT_TELEMETRY_MS 300000    // Every 5 min
+    #define MQTT_SAVE_DELAY_MS 5000     // Commands from Home Assistant are saved once they stop changing
+    #if defined(ESP8266)
+      #define MQTT_BUFFER_SIZE 1024     // Largest incoming message (config JSON)
+    #else
+      #define MQTT_BUFFER_SIZE 2048
+    #endif
 #endif
 
 #ifdef LED
@@ -134,6 +147,37 @@
 #endif
 
 
+#ifdef LED
+  // Custom modes defined at /modes. Effect values are persisted - append only.
+  #define CUSTOM_MODE_COUNT       8     // Slots, registered after the built-in modes
+  #define CUSTOM_MODE_NAME_SIZE   24
+  #define CUSTOM_MODE_MAX_COLORS  8
+  #define CUSTOM_MODE_MAX_SPEED   10
+  #define CUSTOM_MODE_MAX_REPEAT  10
+  #define CUSTOM_MODE_SMOOTH      0x01  // flags: blend between colors instead of hard edges
+
+  #define CUSTOM_EFFECT_NONE      0     // Empty slot
+  #define CUSTOM_EFFECT_FADE      1     // Whole light fades through the colors
+  #define CUSTOM_EFFECT_SCROLL    2     // Colors travel from one end to the other
+  #define CUSTOM_EFFECT_CENTER    3     // Colors flow from the center to both ends, or back
+  #define CUSTOM_EFFECT_TWINKLE   4     // Random LEDs light up and fade out
+  #define CUSTOM_EFFECT_CIRCLE    5     // Ring: colors rotate around each ring
+  #define CUSTOM_EFFECT_HALVES    6     // Ring: each ring mirrored around its first LED
+  #define CUSTOM_EFFECT_RINGS     7     // Ring: each ring one color, colors pass between rings
+  #define CUSTOM_EFFECT_COUNT     8
+
+  struct custom_mode_t {
+    char name[CUSTOM_MODE_NAME_SIZE];
+    uint8_t effect;       // CUSTOM_EFFECT_*
+    uint8_t colorCount;   // 1..CUSTOM_MODE_MAX_COLORS
+    uint8_t flags;        // CUSTOM_MODE_*
+    uint8_t direction;    // Effect specific, see CUSTOM_EFFECTS
+    uint8_t speed;        // 1..CUSTOM_MODE_MAX_SPEED
+    uint8_t repeat;       // Palette repetitions across the LEDs, 1..CUSTOM_MODE_MAX_REPEAT
+    uint8_t colors[CUSTOM_MODE_MAX_COLORS][3];
+  };
+#endif
+
 struct configuration_t {
 
     #ifdef WIFI
@@ -179,7 +223,23 @@ struct configuration_t {
         uint16_t ledRingOuterSize;  // LEDs in the outer ring, ring layout only
         uint8_t ledMirror;          // Dual layout: second strip repeats the first
         char _ledLoaded[4];         // "led" once the block above is initialized
+
+        custom_mode_t customModes[CUSTOM_MODE_COUNT];
+        char _customModesLoaded[4]; // "cm1" once customModes is initialized
     #endif
+
+    #ifdef LED
+        uint8_t ledPower;           // LEDs on (1) or off (0), from the main page, /api or Home Assistant
+    #endif
+    #ifdef WIFI
+        char mqttServer[128];       // Blank disables MQTT
+        uint16_t mqttPort;
+        char mqttUser[64];          // Blank connects anonymously
+        char mqttPassword[64];
+        char mqttTopic[64];         // Base topic, the device id is appended
+        uint8_t mqttDiscovery;      // Publish Home Assistant discovery
+    #endif
+    char _mqttLoaded[4];            // "mq1" once the block above is initialized
 };
 
 extern configuration_t configuration;
@@ -229,4 +289,5 @@ void intLEDBlink(uint16_t ms);
     bool CONFIG_isValidLedPin(uint8_t pin);
     uint16_t CONFIG_getLedCount(const configuration_t &c);  // Physical LEDs across all strips
     const char* CONFIG_checkLedHardware(const configuration_t &c);  // nullptr if valid, else the reason
+    bool CONFIG_ledHardwareEquals(const configuration_t &a, const configuration_t &b);  // Same strips, i.e. no reboot needed
 #endif

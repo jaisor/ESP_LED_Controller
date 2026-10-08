@@ -13,6 +13,8 @@
 #include "wifi/WifiManager.h"
 #include "wifi/HTMLAssets.h"
 #include "Device.h"
+#include "modes/CustomMode.h"
+#include <memory>
 
 #define MAX_CONNECT_TIMEOUT_MS 15000 // 10 seconds to connect before creating its own AP
 #define POST_UPDATE_INTERVAL 300000 // Every 5 min
@@ -117,6 +119,11 @@ CWifiManager::CWifiManager()
 
   strcpy(SSID, configuration.wifiSsid);
   server = new AsyncWebServer(WEB_SERVER_PORT);
+
+  mqttBaseTopic = String(configuration.mqttTopic) + "/" + CONFIG_getDeviceId();
+  mqtt.setClient(mqttClient);
+  mqtt.setBufferSize(MQTT_BUFFER_SIZE);
+  mqtt.setCallback([this](char *topic, uint8_t *payload, unsigned int length) { mqttCallback(topic, payload, length); });
   connect();
 }
 
@@ -209,9 +216,14 @@ void CWifiManager::listen() {
   server->on("/wifi", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleWifi(request); });
   server->on("/device", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleDevice(request); });
   server->on("/led", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleLED(request); });
+  server->on("/modes", HTTP_GET, [this](AsyncWebServerRequest *request) { handleModes(request); });
+  server->addHandler(new AsyncCallbackJsonWebHandler("/modes", [this](AsyncWebServerRequest *request, JsonVariant &json) {
+    handleCustomModeUpdate(request, json.as<JsonObject>());
+  }));
   //
   server->on("/factory_reset", HTTP_POST, [this](AsyncWebServerRequest *request) { handleFactoryReset(request); });
   server->on("/reboot", HTTP_POST, [this](AsyncWebServerRequest *request) { handleReboot(request); });
+  server->on("/mqtt_reconnect", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleMqttReconnect(request); });
 #ifdef WEB_LOGGING
   server->on("/log", HTTP_GET, [](AsyncWebServerRequest *request){ 
     Log.traceln("handleLog");
@@ -300,6 +312,10 @@ void CWifiManager::loop() {
 
   if (rebootNeeded && millis() - tMillis > 300) {
     Log.noticeln("Rebooting...");
+    if (mqtt.connected()) {
+      mqtt.publish(mqttTopic("availability").c_str(), "offline", true);
+      mqtt.disconnect();
+    }
   #if defined(ESP32)
     ESP.restart();
   #elif defined(ESP8266)
@@ -328,6 +344,10 @@ void CWifiManager::loop() {
       }
       listen();
       return;
+    }
+
+    if (!isApMode()) {
+      mqttLoop();
     }
 
     #ifdef OLEDA
@@ -410,6 +430,7 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
   if (request->method() == HTTP_POST) {
 
     // LED Settings (strip hardware is set at /led)
+    configuration.ledPower = request->hasArg("ledPower");
     uint8_t ledMode = atoi(request->arg("ledMode").c_str());
     if (isModeSelectable(ledMode, ledLayout)) {
       configuration.ledMode = ledMode;
@@ -579,6 +600,17 @@ void CWifiManager::handleWifi(AsyncWebServerRequest *request) {
   intLEDOff();
 }
 
+// MQTT base topic without wildcards or surrounding slashes, MQTT_TOPIC if nothing is left
+static void setMqttBaseTopic(char *dst, size_t size, String topic) {
+  topic.trim();
+  topic.replace("#", "");
+  topic.replace("+", "");
+  while (topic.startsWith("/")) topic.remove(0, 1);
+  while (topic.endsWith("/")) topic.remove(topic.length() - 1);
+  if (!topic.length()) topic = MQTT_TOPIC;
+  strlcpy(dst, topic.c_str(), size);
+}
+
 void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
   Log.traceln("handleDevice: %s", request->methodToString());
   intLEDOn();
@@ -601,6 +633,26 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
         configTzTime(tz, configuration.ntpServer);
       }
     }
+
+    // MQTT, applied by the reboot below
+    String mqttServer = request->arg("mqttServer");
+    mqttServer.trim();
+    strlcpy(configuration.mqttServer, mqttServer.c_str(), sizeof(configuration.mqttServer));
+    long mqttPort = request->arg("mqttPort").toInt();
+    configuration.mqttPort = (mqttPort > 0 && mqttPort <= 65535) ? mqttPort : MQTT_PORT;
+    String mqttUser = request->arg("mqttUser");
+    mqttUser.trim();
+    strlcpy(configuration.mqttUser, mqttUser.c_str(), sizeof(configuration.mqttUser));
+    if (!mqttUser.length()) {
+      strcpy(configuration.mqttPassword, "");
+    } else if (request->arg("mqttPassword").length()) {
+      // Blank keeps the saved password, which is never sent back to the page
+      strlcpy(configuration.mqttPassword, request->arg("mqttPassword").c_str(), sizeof(configuration.mqttPassword));
+    }
+    setMqttBaseTopic(configuration.mqttTopic, sizeof(configuration.mqttTopic), request->arg("mqttTopic"));
+    configuration.mqttDiscovery = request->hasArg("mqttDiscovery");
+    Log.infoln("MQTT server '%s:%u', topic '%s', discovery %d", configuration.mqttServer, configuration.mqttPort,
+      configuration.mqttTopic, configuration.mqttDiscovery);
 
     EEPROM_saveConfig();
     
@@ -628,7 +680,12 @@ void CWifiManager::handleDevice(AsyncWebServerRequest *request) {
     response->printf_P(htmlDevice,
       CONFIG_getChipModel().c_str(), CONFIG_getChipRevision(),
       CONFIG_getFlashChipSize() / (1024 * 1024), WiFi.macAddress().c_str(),
-      configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str(), configuration.name);
+      configuration.ledEnabled ? "checked" : "", configuration.name, tzOptions.c_str(),
+      configuration.mqttServer, configuration.mqttPort, configuration.mqttUser,
+      strlen(configuration.mqttPassword) ? "saved - leave blank to keep" : "none",
+      configuration.mqttTopic, configuration.mqttDiscovery ? "checked" : "",
+      mqttBaseTopic.c_str(), mqttBaseTopic.c_str(), mqttBaseTopic.c_str(),
+      configuration.name);
     printHTMLBottom(response);
     request->send(response);
   }
@@ -742,8 +799,198 @@ void CWifiManager::handleLED(AsyncWebServerRequest *request) {
   intLEDOff();
 }
 
-bool CWifiManager::isModeSelectable(uint8_t index, uint8_t layout) {
-  return modes != NULL && index < modes->size() && (*modes)[index]->supportsLayout(layout);
+bool CWifiManager::isModeSelectable(uint8_t index, uint8_t layout, const configuration_t &c) {
+  if (modes == NULL || index >= modes->size()) {
+    return false;
+  }
+  int8_t slot = (*modes)[index]->getCustomSlot();
+  if (slot >= 0) {
+    return CUSTOM_effectSupportsLayout(c.customModes[slot].effect, layout);
+  }
+  return (*modes)[index]->supportsLayout(layout);
+}
+
+int CWifiManager::customModeIndex(uint8_t slot) {
+  for (size_t i = 0; modes != NULL && i < modes->size(); i++) {
+    if ((*modes)[i]->getCustomSlot() == slot) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static int freeCustomModeSlot(const configuration_t &c) {
+  for (uint8_t i = 0; i < CUSTOM_MODE_COUNT; i++) {
+    if (c.customModes[i].effect == CUSTOM_EFFECT_NONE) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+static void customModeToJson(const custom_mode_t &m, uint8_t slot, JsonObject o) {
+  o["slot"] = slot;
+  o["name"] = String(m.name);
+  o["effect"] = CUSTOM_EFFECTS[m.effect].id;
+  JsonArray colors = o["colors"].to<JsonArray>();
+  for (uint8_t i = 0; i < m.colorCount; i++) {
+    char hex[8];
+    snprintf(hex, sizeof(hex), "#%02x%02x%02x", m.colors[i][0], m.colors[i][1], m.colors[i][2]);
+    colors.add(String(hex));
+  }
+  o["smooth"] = (bool)(m.flags & CUSTOM_MODE_SMOOTH);
+  o["direction"] = m.direction;
+  o["speed"] = m.speed;
+  o["repeat"] = m.repeat;
+}
+
+// nullptr if o describes a valid custom mode, else the reason it doesn't
+static const char* customModeFromJson(JsonObjectConst o, custom_mode_t &m) {
+  memset(&m, 0, sizeof(m));
+
+  const char *name = o["name"];
+  if (!name || !strlen(name)) return "name is required";
+  if (strlen(name) >= CUSTOM_MODE_NAME_SIZE) return "name is too long";
+  // The name ends up in HTML and inline JSON unescaped
+  if (strpbrk(name, "<>&\"'\\")) return "name can't contain < > & \" ' or \\";
+  strcpy(m.name, name);
+
+  int effect = CUSTOM_effectFromId(o["effect"]);
+  if (effect < 0) return "unknown effect";
+  m.effect = effect;
+
+  JsonArrayConst colors = o["colors"];
+  if (colors.isNull() || colors.size() == 0 || colors.size() > CUSTOM_MODE_MAX_COLORS) return "between 1 and 8 colors required";
+  for (JsonVariantConst v : colors) {
+    const char *hex = v;
+    char *end = nullptr;
+    uint32_t rgb = (hex && hex[0] == '#' && strlen(hex) == 7) ? strtoul(hex + 1, &end, 16) : 0;
+    if (!end || *end) return "colors must be #rrggbb";
+    m.colors[m.colorCount][0] = rgb >> 16;
+    m.colors[m.colorCount][1] = rgb >> 8;
+    m.colors[m.colorCount][2] = rgb;
+    m.colorCount++;
+  }
+
+  m.flags = (o["smooth"] | true) ? CUSTOM_MODE_SMOOTH : 0;
+
+  const char *directions = CUSTOM_EFFECTS[effect].directions;
+  int directionCount = 1;
+  for (const char *d = directions; d && *d; d++) {
+    if (*d == '|') directionCount++;
+  }
+  int direction = o["direction"] | 0;
+  if (direction < 0 || direction >= directionCount) return "unknown direction for this effect";
+  m.direction = direction;
+
+  int speed = o["speed"] | 3;
+  if (speed < 1 || speed > CUSTOM_MODE_MAX_SPEED) return "speed must be 1 to 10";
+  m.speed = speed;
+
+  int repeat = o["repeat"] | 1;
+  if (repeat < 1 || repeat > CUSTOM_MODE_MAX_REPEAT) return "repeat must be 1 to 10";
+  m.repeat = repeat;
+
+  return nullptr;
+}
+
+// Everything the Mode Configurator page renders from: effects for the running layout and the saved modes
+String CWifiManager::customModesPageJson(int savedSlot) {
+  JsonDocument doc;
+  doc["savedSlot"] = savedSlot;
+  doc["layout"] = LED_LAYOUT_LABELS[ledLayout];
+  doc["slots"] = CUSTOM_MODE_COUNT;
+  doc["maxColors"] = CUSTOM_MODE_MAX_COLORS;
+  doc["currentMode"] = configuration.ledMode;
+
+  JsonArray effects = doc["effects"].to<JsonArray>();
+  for (uint8_t i = CUSTOM_EFFECT_NONE + 1; i < CUSTOM_EFFECT_COUNT; i++) {
+    JsonObject e = effects.add<JsonObject>();
+    e["id"] = CUSTOM_EFFECTS[i].id;
+    e["label"] = CUSTOM_EFFECTS[i].label;
+    e["help"] = CUSTOM_EFFECTS[i].help;
+    e["directions"] = CUSTOM_EFFECTS[i].directions;
+    e["usesRepeat"] = CUSTOM_EFFECTS[i].usesRepeat;
+    e["available"] = CUSTOM_effectSupportsLayout(i, ledLayout);
+  }
+
+  JsonArray saved = doc["modes"].to<JsonArray>();
+  for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
+    if (configuration.customModes[slot].effect == CUSTOM_EFFECT_NONE) continue;
+    JsonObject o = saved.add<JsonObject>();
+    customModeToJson(configuration.customModes[slot], slot, o);
+    int index = customModeIndex(slot);
+    o["index"] = index;
+    o["available"] = index >= 0 && isModeSelectable(index, ledLayout);
+  }
+
+  String json;
+  serializeJson(doc, json);
+  return json;
+}
+
+void CWifiManager::handleModes(AsyncWebServerRequest *request) {
+  Log.traceln("handleModes");
+  intLEDOn();
+  AsyncResponseStream *response = request->beginResponseStream("text/html; charset=UTF-8", 12288);
+  printHTMLTop(response);
+  response->printf_P(htmlModes, customModesPageJson().c_str());
+  printHTMLBottom(response);
+  request->send(response);
+  intLEDOff();
+}
+
+// POST /modes: {slot?, name, effect, colors, smooth, direction, speed, repeat, activate?} saves a mode,
+// {slot, delete: true} removes one. Takes effect immediately, no reboot.
+void CWifiManager::handleCustomModeUpdate(AsyncWebServerRequest *request, JsonObject body) {
+  Log.traceln("handleCustomModeUpdate");
+  intLEDOn();
+
+  int slot = body["slot"] | -1;
+  const char *error = nullptr;
+
+  if (body["delete"] | false) {
+    if (slot < 0 || slot >= CUSTOM_MODE_COUNT) {
+      error = "unknown slot";
+    } else {
+      memset(&configuration.customModes[slot], 0, sizeof(custom_mode_t));
+      Log.noticeln("Deleted custom mode %d", slot);
+    }
+  } else {
+    custom_mode_t mode;
+    error = customModeFromJson(body, mode);
+    if (!error && slot < 0) {
+      slot = freeCustomModeSlot(configuration);
+      if (slot < 0) error = "all custom mode slots are in use, delete one first";
+    }
+    if (!error && slot >= CUSTOM_MODE_COUNT) {
+      error = "unknown slot";
+    }
+    if (!error) {
+      configuration.customModes[slot] = mode;
+      Log.noticeln("Saved custom mode %d '%s'", slot, mode.name);
+      int index = customModeIndex(slot);
+      if ((body["activate"] | false) && index >= 0 && isModeSelectable(index, ledLayout)) {
+        configuration.ledMode = index;
+        updateModeChangeTime();
+      }
+    }
+  }
+
+  if (error) {
+    AsyncResponseStream *response = request->beginResponseStream("text/plain; charset=UTF-8", 128);
+    response->setCode(400);
+    response->print(error);
+    request->send(response);
+  } else {
+    EEPROM_saveConfig();
+    mqttDiscoveryNeeded = true;  // Effect list
+    AsyncResponseStream *response = request->beginResponseStream("application/json; charset=UTF-8", 4096);
+    response->print(customModesPageJson(slot));
+    request->send(response);
+  }
+
+  intLEDOff();
 }
 
 void CWifiManager::handleFactoryReset(AsyncWebServerRequest *request) {
@@ -846,10 +1093,18 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   configJson["ntpServer"] = configuration.ntpServer;
   configJson["gmtOffset_sec"] = configuration.gmtOffset_sec;
   configJson["daylightOffset_sec"] = configuration.daylightOffset_sec;
+
+  // MQTT settings (the password is never exported)
+  configJson["mqttServer"] = configuration.mqttServer;
+  configJson["mqttPort"] = configuration.mqttPort;
+  configJson["mqttUser"] = configuration.mqttUser;
+  configJson["mqttTopic"] = configuration.mqttTopic;
+  configJson["mqttDiscovery"] = (bool)configuration.mqttDiscovery;
   #endif
 
   #ifdef LED
   // LED settings
+  configJson["ledPower"] = (bool)configuration.ledPower;
   configJson["ledBrightness"] = configuration.ledBrightness;
   configJson["ledMode"] = configuration.ledMode;
   configJson["ledType"] = configuration.ledType;
@@ -870,6 +1125,12 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   JsonArray cycleModes = configJson["cycleModesList"].to<JsonArray>();
   for (uint8_t i = 0; i < configuration.cycleModesCount; i++) {
     cycleModes.add(configuration.cycleModesList[i]);
+  }
+  JsonArray customModes = configJson["customModes"].to<JsonArray>();
+  for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
+    if (configuration.customModes[slot].effect != CUSTOM_EFFECT_NONE) {
+      customModeToJson(configuration.customModes[slot], slot, customModes.add<JsonObject>());
+    }
   }
   #endif
 
@@ -919,6 +1180,7 @@ void CWifiManager::printHTMLTop(Print *p) {
   p->printf_P(htmlTop, 
     configuration.name, 
     isApMode() ? softAP_SSID : SSID, dBmtoPercentage(WiFi.RSSI()),
+    mqttStatusHtml().c_str(),
     hr, min % 60, sec % 60,
     configuration.name
   );
@@ -994,6 +1256,7 @@ void CWifiManager::printHTMLMain(Print *p) {
     timeRemaining.c_str(),
     currentTimeStr.c_str(),
     ledHardwareSummary().c_str(),
+    configuration.ledPower ? "checked" : "",
     modeOptions.c_str(), 
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
@@ -1011,8 +1274,10 @@ void CWifiManager::printHTMLMain(Print *p) {
 
 bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware, String *error) {
 
-  // Work on a copy so a rejected request leaves the running configuration untouched
-  configuration_t c = configuration;
+  // Work on a copy so a rejected request leaves the running configuration untouched. On the heap:
+  // with the custom modes it is too big for the async web server's stack on ESP8266.
+  std::unique_ptr<configuration_t> copy(new configuration_t(configuration));
+  configuration_t &c = *copy;
   bool networkChanged = false;
 
   // Device information
@@ -1068,6 +1333,33 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
     Log.traceln("Setting 'daylightOffset_sec' to %d", c.daylightOffset_sec);
     networkChanged = true;
   }
+
+  // MQTT settings
+  if (!jsonObj["mqttServer"].isNull()) {
+    strlcpy(c.mqttServer, jsonObj["mqttServer"] | "", sizeof(c.mqttServer));
+    networkChanged = true;
+  }
+  if (!jsonObj["mqttPort"].isNull()) {
+    long port = jsonObj["mqttPort"].as<long>();
+    c.mqttPort = (port > 0 && port <= 65535) ? port : MQTT_PORT;
+    networkChanged = true;
+  }
+  if (!jsonObj["mqttUser"].isNull()) {
+    strlcpy(c.mqttUser, jsonObj["mqttUser"] | "", sizeof(c.mqttUser));
+    networkChanged = true;
+  }
+  if (!jsonObj["mqttPassword"].isNull()) {
+    strlcpy(c.mqttPassword, jsonObj["mqttPassword"] | "", sizeof(c.mqttPassword));
+    networkChanged = true;
+  }
+  if (!jsonObj["mqttTopic"].isNull()) {
+    setMqttBaseTopic(c.mqttTopic, sizeof(c.mqttTopic), jsonObj["mqttTopic"] | "");
+    networkChanged = true;
+  }
+  if (!jsonObj["mqttDiscovery"].isNull()) {
+    c.mqttDiscovery = jsonObj["mqttDiscovery"].as<bool>();
+    networkChanged = true;
+  }
   #endif
 
   #ifdef LED
@@ -1109,10 +1401,40 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
     }
   }
 
+  // Custom modes - a list replaces all of them, keeping each one's slot where possible
+  if (jsonObj["customModes"].is<JsonArray>()) {
+    memset(c.customModes, 0, sizeof(c.customModes));
+    uint8_t n = 0;
+    for (JsonVariantConst v : jsonObj["customModes"].as<JsonArrayConst>()) {
+      custom_mode_t mode;
+      const char *modeError = customModeFromJson(v.as<JsonObjectConst>(), mode);
+      if (modeError) {
+        if (error) *error = String("custom mode ") + (n + 1) + ": " + modeError;
+        return false;
+      }
+      int slot = v["slot"] | -1;
+      if (slot < 0 || slot >= CUSTOM_MODE_COUNT || c.customModes[slot].effect != CUSTOM_EFFECT_NONE) {
+        slot = freeCustomModeSlot(c);
+      }
+      if (slot < 0) {
+        if (error) *error = "too many custom modes";
+        return false;
+      }
+      c.customModes[slot] = mode;
+      n++;
+    }
+    mqttDiscoveryNeeded = true;  // Effect list
+  }
+
   // Modes must fit the layout they will run on: the requested one if this request changes it
   const uint8_t modeLayout = allowHardware ? c.ledLayout : ledLayout;
 
   // LED settings
+  if (!jsonObj["ledPower"].isNull()) {
+    c.ledPower = jsonObj["ledPower"].as<bool>();
+    Log.traceln("Setting 'ledPower' to %d", c.ledPower);
+  }
+
   if (!jsonObj["ledBrightness"].isNull()) {
     float brightness = jsonObj["ledBrightness"].as<float>();
     if (brightness >= 0.0 && brightness <= 1.0) {
@@ -1123,7 +1445,7 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
 
   if (!jsonObj["ledMode"].isNull()) {
     uint8_t mode = jsonObj["ledMode"].as<uint8_t>();
-    if (isModeSelectable(mode, modeLayout)) {
+    if (isModeSelectable(mode, modeLayout, c)) {
       c.ledMode = mode;
       Log.traceln("Setting 'ledMode' to %d", c.ledMode);
     }
@@ -1169,7 +1491,7 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
     uint8_t count = 0;
     for (JsonVariant v : modeList) {
       uint8_t modeIndex = v.as<uint8_t>();
-      if (count < 32 && isModeSelectable(modeIndex, modeLayout)) {
+      if (count < 32 && isModeSelectable(modeIndex, modeLayout, c)) {
         c.cycleModesList[count++] = modeIndex;
       }
     }

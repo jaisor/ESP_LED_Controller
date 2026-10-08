@@ -13,6 +13,7 @@
 #include "modes/ChargingMode.h"
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
+#include "modes/CustomMode.h"
 
 const TProgmemRGBPalette16 PayPal_p FL_PROGMEM =
 {
@@ -315,6 +316,13 @@ void CLEDManager::registerModes() {
   addMode(new CRingPaletteMode(n, outer, "Ring Lava Colors", LavaColors_p, ringIncrement), ring);
   addMode(new CHoneyOrangeMode(n, outer, "Honey Amber"), ring);
   addMode(new CRingPaletteMode(n, outer, "Ring Pride", Pride_p, ringIncrement), ring);
+
+  // Custom mode slots (Mode Configurator). All of them are registered so their indices don't move;
+  // empty slots and effects that don't fit the layout report themselves unavailable.
+  // New built-in modes go after these.
+  for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
+    modes.push_back(new CCustomMode(n, outer, slot));
+  }
 }
 
 void CLEDManager::handleChargingInput() {

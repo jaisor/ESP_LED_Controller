@@ -7,6 +7,8 @@
 #endif
 
 configuration_t configuration;
+// ESP8266 emulates EEPROM in a single 4KB flash sector
+static_assert(EEPROM_CONFIGURATION_START + sizeof(configuration_t) <= 4096, "configuration_t no longer fits in EEPROM");
 #ifdef WEB_LOGGING
   StringPrint logStream;
 
@@ -108,7 +110,9 @@ void EEPROM_loadConfig() {
     configuration.ledEnabled = false;
     #ifdef LED
       configuration._ledLoaded[0] = '\0';
+      configuration._customModesLoaded[0] = '\0';
     #endif
+    configuration._mqttLoaded[0] = '\0';
   }
 
 #ifdef LED
@@ -123,6 +127,39 @@ void EEPROM_loadConfig() {
     configuration.ledStripSize2 = LED_STRIP_SIZE_2;
     configuration.ledRingOuterSize = LED_RING_OUTER_SIZE;
     configuration.ledMirror = false;
+  }
+  if (strcmp(configuration._customModesLoaded, "cm1")) {
+    Log.infoln("No custom modes, clearing slots");
+    strcpy(configuration._customModesLoaded, "cm1");
+    memset(configuration.customModes, 0, sizeof(configuration.customModes));
+  }
+#endif
+
+  if (strcmp(configuration._mqttLoaded, "mq1")) {
+    Log.infoln("No MQTT configuration, loading defaults");
+    strcpy(configuration._mqttLoaded, "mq1");
+    #ifdef LED
+      configuration.ledPower = true;
+    #endif
+    #ifdef WIFI
+      strcpy(configuration.mqttServer, "");
+      configuration.mqttPort = MQTT_PORT;
+      strcpy(configuration.mqttUser, "");
+      strcpy(configuration.mqttPassword, "");
+      strcpy(configuration.mqttTopic, MQTT_TOPIC);
+      configuration.mqttDiscovery = true;
+    #endif
+  }
+#ifdef WIFI
+  configuration.mqttServer[sizeof(configuration.mqttServer) - 1] = '\0';
+  configuration.mqttUser[sizeof(configuration.mqttUser) - 1] = '\0';
+  configuration.mqttPassword[sizeof(configuration.mqttPassword) - 1] = '\0';
+  configuration.mqttTopic[sizeof(configuration.mqttTopic) - 1] = '\0';
+  if (configuration.mqttPort == 0) {
+    configuration.mqttPort = MQTT_PORT;
+  }
+  if (!strlen(configuration.mqttTopic)) {
+    strcpy(configuration.mqttTopic, MQTT_TOPIC);
   }
 #endif
 
@@ -206,6 +243,28 @@ void EEPROM_loadConfig() {
     // Whatever is left (pins shared between strips, too many LEDs, ring too small) - fall back to one strip
     Log.warningln("LED hardware configuration invalid (%s), using a single strip", ledError);
     configuration.ledLayout = LED_LAYOUT_SINGLE;
+  }
+
+  for (uint8_t i = 0; i < CUSTOM_MODE_COUNT; i++) {
+    custom_mode_t &m = configuration.customModes[i];
+    if (m.effect == CUSTOM_EFFECT_NONE) {
+      continue;
+    }
+    if (m.effect >= CUSTOM_EFFECT_COUNT) {
+      Log.verboseln("Invalid custom mode %d, clearing", i);
+      memset(&m, 0, sizeof(m));
+      continue;
+    }
+    m.name[CUSTOM_MODE_NAME_SIZE - 1] = '\0';
+    if (!strlen(m.name)) {
+      snprintf(m.name, sizeof(m.name), "Custom %d", i + 1);
+    }
+    m.colorCount = constrain(m.colorCount, 1, CUSTOM_MODE_MAX_COLORS);
+    m.speed = constrain(m.speed, 1, CUSTOM_MODE_MAX_SPEED);
+    m.repeat = constrain(m.repeat, 1, CUSTOM_MODE_MAX_REPEAT);
+    if (m.direction > 2) {
+      m.direction = 0;
+    }
   }
 #endif
 
@@ -358,7 +417,7 @@ float CONFIG_getLedBrightness(bool force) {
   #else
     currentLedBrightness = configuration.ledBrightness;
   #endif
-  return currentLedBrightness;
+  return configuration.ledPower ? currentLedBrightness : 0;
 }
 #endif
 
@@ -433,6 +492,12 @@ uint16_t CONFIG_getLedCount(const configuration_t &c) {
     return c.ledStripSize + (c.ledMirror ? c.ledStripSize : c.ledStripSize2);
   }
   return c.ledStripSize;
+}
+
+bool CONFIG_ledHardwareEquals(const configuration_t &a, const configuration_t &b) {
+  return a.ledLayout == b.ledLayout && a.ledType == b.ledType && a.ledColorOrder == b.ledColorOrder
+    && a.ledPin == b.ledPin && a.ledPin2 == b.ledPin2 && a.ledStripSize == b.ledStripSize
+    && a.ledStripSize2 == b.ledStripSize2 && a.ledRingOuterSize == b.ledRingOuterSize && a.ledMirror == b.ledMirror;
 }
 
 const char* CONFIG_checkLedHardware(const configuration_t &c) {

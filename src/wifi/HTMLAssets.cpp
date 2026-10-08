@@ -11,7 +11,10 @@ const char htmlTop[] PROGMEM = R"=====(
     <title>%s - WiFi Climate Sensor</title>
     <script>
       document.addEventListener("DOMContentLoaded", function() {
-        document.querySelector("form").addEventListener("submit", function (event) {
+        // Plain POST forms; pages with their own submit handling use forms without a method
+        var form = document.querySelector("form[method]");
+        if (!form) return;
+        form.addEventListener("submit", function (event) {
           var data = this;
           var submit = data.querySelector("button[type='submit']");
           var label = submit.innerHTML;
@@ -54,6 +57,7 @@ const char htmlTop[] PROGMEM = R"=====(
   <body>
     <header class="container">
       <span>🛜 %s <b>%i%%</b> ▪ </span>
+      %s
       <span>⌛<b>%02d:%02d:%02d</b></span>
       <nav>
         <ul><li>
@@ -67,6 +71,7 @@ const char htmlTop[] PROGMEM = R"=====(
             <summary>⚙️</summary>
             <ul dir="rtl">
               <li><a href="led">LED Setup 💡</a></li>
+              <li><a href="modes">Mode Configurator 🎨</a></li>
               <li><a href="wifi">WiFi 🛜</a></li>
               <li><a href="device">Device 📟</a></li>
             </ul>
@@ -118,6 +123,11 @@ const char htmlMain[] PROGMEM = R"=====(
       <p>💡 %s <a href='led'>change</a></p>
       <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
+          <label>
+            <input type='checkbox' role='switch' id='ledPower' name='ledPower' %s>
+            LEDs on
+          </label>
+          <br/>
           <label>
             LED Mode
             <select name='ledMode' id='ledMode'>
@@ -188,9 +198,9 @@ const char htmlDevice[] PROGMEM = R"=====(
       <form method='POST' action='device' enctype='application/x-www-form-urlencoded' delay='8000'>
         <fieldset>
           <label>
-            LED enabled
+            Status LED enabled
             <input name='ledEnabled' id='ledEnabled' type='checkbox' role='switch' %s /><br/>
-            <sub><small>disable to reduce light noise in bedrooms</small></sub>
+            <sub><small>the board's own LED, disable to reduce light noise in bedrooms</small></sub>
           </label>
           <br/>
           <label>
@@ -204,6 +214,39 @@ const char htmlDevice[] PROGMEM = R"=====(
               %s
             </select>
           </label>
+        </fieldset>
+        <fieldset>
+          <legend><strong>📡 MQTT and Home Assistant</strong></legend>
+          <label>
+            MQTT server
+            <input type='text' id='mqttServer' name='mqttServer' value='%s' placeholder='e.g. homeassistant.local - blank disables MQTT'>
+          </label>
+          <label>
+            MQTT port
+            <input type='number' id='mqttPort' name='mqttPort' value='%u' min='1' max='65535'>
+          </label>
+          <label>
+            Username
+            <input type='text' id='mqttUser' name='mqttUser' value='%s' autocomplete='off' placeholder='blank for anonymous'>
+          </label>
+          <label>
+            Password
+            <input type='password' id='mqttPassword' name='mqttPassword' autocomplete='new-password' placeholder='%s'>
+          </label>
+          <label>
+            Base topic
+            <input type='text' id='mqttTopic' name='mqttTopic' value='%s'>
+            <sub><small>The device id is appended to keep devices apart</small></sub>
+          </label>
+          <label>
+            <input type='checkbox' role='switch' id='mqttDiscovery' name='mqttDiscovery' %s>
+            Home Assistant discovery
+            <br/><sub><small>Adds this device to Home Assistant as a light with brightness and the modes of the current layout as effects</small></sub>
+          </label>
+          <p><small>
+            Commands <code>%s/set</code>, state <code>%s/state</code>,
+            configuration JSON (same fields as the backup file) <code>%s/config</code>
+          </small></p>
         </fieldset>
         <button type='submit' value='Submit'>Submit...</button>
       </form>
@@ -373,6 +416,265 @@ const char htmlLed[] PROGMEM = R"=====(
             e.addEventListener('change', update);
           });
           update();
+        })();
+      </script>
+)=====";
+
+// Rendered entirely from the JSON in %s (CWifiManager::customModesPageJson) - no other printf arguments,
+// so the template must not contain a literal percent sign
+const char htmlModes[] PROGMEM = R"=====(
+      <h3>Mode Configurator</h3>
+      <p>
+        Custom modes are added to the LED mode list on the main page. Effects are offered for the
+        current layout, <b id='layoutName'></b> (<a href='led'>change</a>).
+      </p>
+      <div id='savedModes'></div>
+      <article>
+        <form id='modeForm'>
+          <h4 id='formTitle'>New mode</h4>
+          <fieldset>
+            <label>
+              Name
+              <input type='text' id='name' maxlength='23' required placeholder='e.g. Sunset'>
+            </label>
+            <label>
+              Effect
+              <select id='effect'></select>
+              <sub><small id='effectHelp'></small></sub>
+            </label>
+            <label id='directionField'>
+              Direction
+              <select id='direction'></select>
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend><strong>Colors</strong></legend>
+            <div id='colors' style='display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem'></div>
+            <button type='button' class='secondary outline' id='addColor'>+ Add color</button>
+            <label>
+              <input type='checkbox' role='switch' id='smooth' checked>
+              Gradual transition between colors
+              <br/><sub><small>Off: each color is a solid band with hard edges</small></sub>
+            </label>
+          </fieldset>
+          <fieldset>
+            <label id='repeatField'>
+              Palette repeats <output id='repeatOut'></output>
+              <input type='range' id='repeat' min='1' max='10'>
+              <sub><small>How many times the colors repeat across the LEDs</small></sub>
+            </label>
+            <label>
+              Speed <output id='speedOut'></output>
+              <input type='range' id='speed' min='1' max='10'>
+              <sub><small>Also scaled by the frame delay on the main page</small></sub>
+            </label>
+          </fieldset>
+          <div role='group'>
+            <button type='submit' id='saveButton'>Save and show</button>
+            <button type='button' class='secondary' id='newButton'>New mode</button>
+          </div>
+        </form>
+      </article>
+      <script>
+        (function () {
+          var data = %s;
+          var editing = -1; // slot being edited, -1 for a new mode
+          var $ = function (id) { return document.getElementById(id); };
+
+          function effectById(id) {
+            return data.effects.find(function (e) { return e.id === id; });
+          }
+
+          function swatch(color) {
+            var s = document.createElement('span');
+            s.style.cssText = 'display:inline-block;width:1.2rem;height:1.2rem;margin-right:2px;border-radius:3px;vertical-align:middle;background:' + color;
+            return s;
+          }
+
+          function button(label, cls, onClick) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = cls;
+            b.textContent = label;
+            b.style.cssText = 'padding:0.25rem 0.75rem;margin:0 0.25rem 0 0';
+            b.addEventListener('click', onClick);
+            return b;
+          }
+
+          function renderSaved() {
+            $('layoutName').textContent = data.layout;
+            var box = $('savedModes');
+            box.innerHTML = '';
+            if (!data.modes.length) {
+              box.innerHTML = '<p><i>No custom modes yet - define one below.</i></p>';
+              return;
+            }
+            var table = document.createElement('table');
+            table.innerHTML = '<thead><tr><th>Name</th><th>Effect</th><th>Colors</th><th></th></tr></thead>';
+            var body = table.createTBody();
+            data.modes.forEach(function (m) {
+              var row = body.insertRow();
+              var name = row.insertCell();
+              name.textContent = m.name;
+              if (m.index === data.currentMode) {
+                var now = document.createElement('small');
+                now.textContent = ' (showing)';
+                name.appendChild(now);
+              }
+              var effect = row.insertCell();
+              effect.textContent = effectById(m.effect).label;
+              if (!m.available) {
+                var na = document.createElement('small');
+                na.textContent = ' - not available on this layout';
+                effect.appendChild(na);
+              }
+              var colors = row.insertCell();
+              m.colors.forEach(function (c) { colors.appendChild(swatch(c)); });
+              var actions = row.insertCell();
+              actions.appendChild(button('Edit', 'secondary', function () { edit(m); }));
+              actions.appendChild(button('Delete', 'secondary outline', function () {
+                if (!confirm('Delete "' + m.name + '"?')) return;
+                send({ slot: m.slot, delete: true }, this).then(function () {
+                  if (editing === m.slot) edit(null);
+                }).catch(function () {});
+              }));
+            });
+            box.appendChild(table);
+            var used = document.createElement('p');
+            used.innerHTML = '<small>' + data.modes.length + ' of ' + data.slots + ' custom mode slots used</small>';
+            box.appendChild(used);
+          }
+
+          function updateColorButtons() {
+            var items = $('colors').children;
+            $('addColor').disabled = items.length >= data.maxColors;
+            for (var i = 0; i < items.length; i++) {
+              items[i].querySelector('button').disabled = items.length < 2;
+            }
+          }
+
+          function addColor(value) {
+            var item = document.createElement('div');
+            item.style.cssText = 'display:flex;align-items:center;gap:0.25rem';
+            var input = document.createElement('input');
+            input.type = 'color';
+            input.value = value;
+            input.style.cssText = 'width:3.5rem;height:2.5rem;padding:0.1rem;margin:0';
+            item.appendChild(input);
+            item.appendChild(button('x', 'secondary outline', function () {
+              item.remove();
+              updateColorButtons();
+            }));
+            $('colors').appendChild(item);
+            updateColorButtons();
+          }
+
+          function fillEffects(current) {
+            var select = $('effect');
+            select.innerHTML = '';
+            data.effects.forEach(function (e) {
+              // Keep an edited mode's effect even if it doesn't fit this layout, so saving doesn't change it
+              if (e.available || e.id === current) {
+                select.add(new Option(e.label + (e.available ? '' : ' (not on this layout)'), e.id));
+              }
+            });
+            if (current) select.value = current;
+          }
+
+          function updateEffect() {
+            var e = effectById($('effect').value);
+            $('effectHelp').textContent = e.help;
+            var direction = $('direction');
+            var previous = direction.value;
+            direction.innerHTML = '';
+            if (e.directions) {
+              e.directions.split('|').forEach(function (label, i) { direction.add(new Option(label, i)); });
+            }
+            if (previous !== '' && previous < direction.options.length) direction.value = previous;
+            $('directionField').hidden = !e.directions;
+            $('repeatField').hidden = !e.usesRepeat;
+          }
+
+          function updateOutputs() {
+            $('speedOut').value = $('speed').value;
+            $('repeatOut').value = $('repeat').value;
+          }
+
+          function edit(m) {
+            editing = m ? m.slot : -1;
+            $('formTitle').textContent = m ? 'Edit "' + m.name + '"' : 'New mode';
+            $('name').value = m ? m.name : '';
+            fillEffects(m ? m.effect : null);
+            $('direction').innerHTML = '';
+            updateEffect();
+            $('direction').value = m ? m.direction : 0;
+            $('colors').innerHTML = '';
+            (m ? m.colors : ['#ff0000', '#0000ff']).forEach(addColor);
+            $('smooth').checked = m ? m.smooth : true;
+            $('speed').value = m ? m.speed : 3;
+            $('repeat').value = m ? m.repeat : 1;
+            updateOutputs();
+            if (m) $('modeForm').scrollIntoView({ behavior: 'smooth' });
+          }
+
+          function send(body, trigger) {
+            trigger.setAttribute('aria-busy', 'true');
+            trigger.disabled = true;
+            return fetch('modes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            }).then(function (res) {
+              return res.text().then(function (text) {
+                if (!res.ok) throw new Error(text);
+                return JSON.parse(text);
+              });
+            }).then(function (d) {
+              data = d;
+              renderSaved();
+              return d;
+            }).catch(function (e) {
+              alert('Not saved: ' + e.message);
+              throw e;
+            }).finally(function () {
+              trigger.removeAttribute('aria-busy');
+              trigger.disabled = false;
+            });
+          }
+
+          $('modeForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            var body = {
+              name: $('name').value.trim(),
+              effect: $('effect').value,
+              direction: parseInt($('direction').value, 10) || 0,
+              colors: Array.prototype.map.call($('colors').querySelectorAll('input'), function (i) { return i.value; }),
+              smooth: $('smooth').checked,
+              speed: parseInt($('speed').value, 10),
+              repeat: parseInt($('repeat').value, 10),
+              activate: true
+            };
+            if (editing >= 0) body.slot = editing;
+            send(body, $('saveButton')).then(function (d) {
+              // Keep editing what was just saved, so further tweaks update it instead of adding copies
+              var saved = d.modes.find(function (m) { return m.slot === d.savedSlot; });
+              if (saved) {
+                editing = saved.slot;
+                $('formTitle').textContent = 'Edit "' + saved.name + '"';
+              }
+            }).catch(function () {});
+          });
+          $('effect').addEventListener('change', updateEffect);
+          $('addColor').addEventListener('click', function () {
+            var inputs = $('colors').querySelectorAll('input');
+            addColor(inputs.length ? inputs[inputs.length - 1].value : '#ffffff');
+          });
+          $('newButton').addEventListener('click', function () { edit(null); });
+          $('speed').addEventListener('input', updateOutputs);
+          $('repeat').addEventListener('input', updateOutputs);
+
+          renderSaved();
+          edit(null);
         })();
       </script>
 )=====";

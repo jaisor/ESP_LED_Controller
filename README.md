@@ -11,6 +11,8 @@
     * serves a webpage for managing LED - mode, brightness, cycling and power-save hours
     * LED setup page (`/led`) - layout (single strip, dual strip, ring light), LED count, data pin(s), chipset and color order
     * configuration export and import as a JSON file on the Device page
+    * Mode Configurator (`/modes`) - define up to 8 custom modes: name, color palette (up to 8 colors, smooth or hard transitions), effect, direction, speed and palette repeats. Effects depend on the layout: color fade, edge to edge and twinkle everywhere, center to edge on strips, circling, ring halves and ring to ring on a ring light
+* MQTT and Home Assistant (Device page) - set the broker and the controller shows up in Home Assistant through MQTT discovery as a light: on/off, brightness, and the modes of the current layout (custom modes included) as effects, plus WiFi signal and IP diagnostics. Other MQTT clients can use the same topics, see below
 * Firmware update over WiFi - new `firmware.bin` file can be uploaded at `/update` after the IP address
 
 ## Components
@@ -76,3 +78,16 @@ This file configures compile-time features and the defaults used after a factory
 * default LED layout, strip size, color order and brightness
 
 Everything LED-hardware related can be changed at runtime on the LED setup page.
+## MQTT
+
+Enable it on the Device page by setting the MQTT server (and username/password if the broker requires one - the Home Assistant Mosquitto add-on does). Topics live under `<base topic>/<device id>`, both shown on the Device page:
+
+| Topic | Direction | Payload |
+| --- | --- | --- |
+| `.../availability` | device → | `online` / `offline`, retained |
+| `.../state` | device → | `{"state": "ON", "brightness": 0-255, "color_mode": "brightness", "effect": "<mode name>"}`, retained |
+| `.../set` | → device | any of `{"state": "ON"/"OFF", "brightness": 0-255, "effect": "<mode name>"}` |
+| `.../config` | → device | configuration JSON, same fields as the Device page backup file; saved, and the device reboots for WiFi, MQTT or LED hardware changes |
+| `.../json` | device → | telemetry (IP, RSSI, uptime, mode, ...), every 5 minutes, retained |
+
+With Home Assistant discovery enabled the device publishes its entities to `homeassistant/light/<device id>/config` and `homeassistant/sensor/<device id>_*/config`, and re-publishes them when Home Assistant restarts or the mode list changes.
