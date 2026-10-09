@@ -839,6 +839,7 @@ static void customModeToJson(const custom_mode_t &m, uint8_t slot, JsonObject o)
     colors.add(String(hex));
   }
   o["smooth"] = (bool)(m.flags & CUSTOM_MODE_SMOOTH);
+  o["rings"] = (m.flags & CUSTOM_MODE_RING_OUTER) ? "outer" : (m.flags & CUSTOM_MODE_RING_INNER) ? "inner" : "both";
   o["direction"] = m.direction;
   o["speed"] = m.speed;
   o["repeat"] = m.repeat;
@@ -874,13 +875,14 @@ static const char* customModeFromJson(JsonObjectConst o, custom_mode_t &m) {
 
   m.flags = (o["smooth"] | true) ? CUSTOM_MODE_SMOOTH : 0;
 
-  const char *directions = CUSTOM_EFFECTS[effect].directions;
-  int directionCount = 1;
-  for (const char *d = directions; d && *d; d++) {
-    if (*d == '|') directionCount++;
-  }
+  // Which rings an effect with ringSelect runs on; kept for any effect so it survives effect changes
+  const char *rings = o["rings"] | "both";
+  if (!strcmp(rings, "outer")) m.flags |= CUSTOM_MODE_RING_OUTER;
+  else if (!strcmp(rings, "inner")) m.flags |= CUSTOM_MODE_RING_INNER;
+  else if (strcmp(rings, "both")) return "rings must be both, outer or inner";
+
   int direction = o["direction"] | 0;
-  if (direction < 0 || direction >= directionCount) return "unknown direction for this effect";
+  if (direction < 0 || direction >= CUSTOM_effectDirectionCount(effect)) return "unknown direction for this effect";
   m.direction = direction;
 
   int speed = o["speed"] | 3;
@@ -899,6 +901,7 @@ String CWifiManager::customModesPageJson(int savedSlot) {
   JsonDocument doc;
   doc["savedSlot"] = savedSlot;
   doc["layout"] = LED_LAYOUT_LABELS[ledLayout];
+  doc["layoutId"] = LED_LAYOUT_IDS[ledLayout];
   doc["slots"] = CUSTOM_MODE_COUNT;
   doc["maxColors"] = CUSTOM_MODE_MAX_COLORS;
   doc["currentMode"] = configuration.ledMode;
@@ -910,7 +913,9 @@ String CWifiManager::customModesPageJson(int savedSlot) {
     e["label"] = CUSTOM_EFFECTS[i].label;
     e["help"] = CUSTOM_EFFECTS[i].help;
     e["directions"] = CUSTOM_EFFECTS[i].directions;
-    e["usesRepeat"] = CUSTOM_EFFECTS[i].usesRepeat;
+    e["repeatLabel"] = CUSTOM_EFFECTS[i].repeatLabel;
+    e["repeatHelp"] = CUSTOM_EFFECTS[i].repeatHelp;
+    e["ringSelect"] = CUSTOM_EFFECTS[i].ringSelect;
     e["available"] = CUSTOM_effectSupportsLayout(i, ledLayout);
   }
 

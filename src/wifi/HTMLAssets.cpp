@@ -464,6 +464,14 @@ const char htmlModes[] PROGMEM = R"=====(
               Direction
               <select id='direction'></select>
             </label>
+            <label id='ringsField'>
+              Rings
+              <select id='rings'>
+                <option value='both'>Both rings</option>
+                <option value='outer'>Outer ring only</option>
+                <option value='inner'>Inner ring only</option>
+              </select>
+            </label>
           </fieldset>
           <fieldset>
             <legend><strong>Colors</strong></legend>
@@ -477,9 +485,9 @@ const char htmlModes[] PROGMEM = R"=====(
           </fieldset>
           <fieldset>
             <label id='repeatField'>
-              Palette repeats <output id='repeatOut'></output>
+              <span id='repeatName'></span> <output id='repeatOut'></output>
               <input type='range' id='repeat' min='1' max='10'>
-              <sub><small>How many times the colors repeat across the LEDs</small></sub>
+              <sub><small id='repeatHelp'></small></sub>
             </label>
             <label>
               Speed <output id='speedOut'></output>
@@ -569,7 +577,7 @@ const char htmlModes[] PROGMEM = R"=====(
           function modeCode(m) {
             return JSON.stringify({
               name: m.name, effect: m.effect, colors: m.colors, smooth: m.smooth,
-              direction: m.direction, speed: m.speed, repeat: m.repeat
+              direction: m.direction, rings: m.rings || 'both', speed: m.speed, repeat: m.repeat
             });
           }
 
@@ -620,6 +628,7 @@ const char htmlModes[] PROGMEM = R"=====(
               effect: e.id,
               colors: m.colors.map(function (c) { return c.toLowerCase(); }),
               smooth: m.smooth !== false,
+              rings: ['both', 'outer', 'inner'].indexOf(m.rings) >= 0 ? m.rings : 'both',
               direction: direction >= 0 && direction < directions ? direction : 0,
               speed: clamp(m.speed, 1, 10, 3),
               repeat: clamp(m.repeat, 1, 10, 1)
@@ -689,7 +698,12 @@ const char htmlModes[] PROGMEM = R"=====(
             }
             if (previous !== '' && previous < direction.options.length) direction.value = previous;
             $('directionField').hidden = !e.directions;
-            $('repeatField').hidden = !e.usesRepeat;
+            // Hidden elsewhere, but the value is kept and saved so the mode is unchanged back on a ring
+            $('ringsField').hidden = !(e.ringSelect && data.layoutId === 'ring');
+            // The repeat slider means something different per effect (palette repeats, stars, flame height...)
+            $('repeatField').hidden = !e.repeatLabel;
+            $('repeatName').textContent = e.repeatLabel || '';
+            $('repeatHelp').textContent = e.repeatHelp || '';
           }
 
           function updateOutputs() {
@@ -708,6 +722,7 @@ const char htmlModes[] PROGMEM = R"=====(
             $('colors').innerHTML = '';
             (m ? m.colors : ['#ff0000', '#0000ff']).forEach(addColor);
             $('smooth').checked = m ? m.smooth : true;
+            $('rings').value = (m && m.rings) || 'both';
             $('speed').value = m ? m.speed : 3;
             $('repeat').value = m ? m.repeat : 1;
             updateOutputs();
@@ -748,6 +763,7 @@ const char htmlModes[] PROGMEM = R"=====(
               direction: parseInt($('direction').value, 10) || 0,
               colors: Array.prototype.map.call($('colors').querySelectorAll('input'), function (i) { return i.value; }),
               smooth: $('smooth').checked,
+              rings: $('rings').value,
               speed: parseInt($('speed').value, 10),
               repeat: parseInt($('repeat').value, 10),
               activate: true

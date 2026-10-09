@@ -338,7 +338,7 @@ void CLEDManager::registerModes() {
   // empty slots and effects that don't fit the layout report themselves unavailable.
   // New built-in modes go after these.
   for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
-    modes.push_back(new CCustomMode(n, outer, slot));
+    modes.push_back(new CCustomMode(n, outer, slot, layout == LED_LAYOUT_RING));
   }
 }
 

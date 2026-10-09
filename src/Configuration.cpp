@@ -4,6 +4,7 @@
 #include "Configuration.h"
 #ifdef LED
   #include <FastLED.h>
+  #include "modes/CustomMode.h"
 #endif
 
 configuration_t configuration;
@@ -262,8 +263,11 @@ void EEPROM_loadConfig() {
     m.colorCount = constrain(m.colorCount, 1, CUSTOM_MODE_MAX_COLORS);
     m.speed = constrain(m.speed, 1, CUSTOM_MODE_MAX_SPEED);
     m.repeat = constrain(m.repeat, 1, CUSTOM_MODE_MAX_REPEAT);
-    if (m.direction > 2) {
+    if (m.direction >= CUSTOM_effectDirectionCount(m.effect)) {
       m.direction = 0;
+    }
+    if ((m.flags & CUSTOM_MODE_RING_OUTER) && (m.flags & CUSTOM_MODE_RING_INNER)) {
+      m.flags &= ~(CUSTOM_MODE_RING_OUTER | CUSTOM_MODE_RING_INNER);  // Neither ring alone means both
     }
   }
 #endif

@@ -155,6 +155,8 @@
   #define CUSTOM_MODE_MAX_SPEED   10
   #define CUSTOM_MODE_MAX_REPEAT  10
   #define CUSTOM_MODE_SMOOTH      0x01  // flags: blend between colors instead of hard edges
+  #define CUSTOM_MODE_RING_OUTER  0x02  // flags: ring layout, draw on the outer ring only (effects with ringSelect)
+  #define CUSTOM_MODE_RING_INNER  0x04  // flags: ring layout, inner ring only; neither bit means both rings
 
   #define CUSTOM_EFFECT_NONE      0     // Empty slot
   #define CUSTOM_EFFECT_FADE      1     // Whole light fades through the colors
@@ -164,7 +166,14 @@
   #define CUSTOM_EFFECT_CIRCLE    5     // Ring: colors rotate around each ring
   #define CUSTOM_EFFECT_HALVES    6     // Ring: each ring mirrored around its first LED
   #define CUSTOM_EFFECT_RINGS     7     // Ring: each ring one color, colors pass between rings
-  #define CUSTOM_EFFECT_COUNT     8
+  #define CUSTOM_EFFECT_STARS     8     // Stars race from random LEDs to an end, trailing the other colors
+  #define CUSTOM_EFFECT_FIRE      9     // Flickering flame (Fire2012), heat mapped onto the colors
+  #define CUSTOM_EFFECT_BREATHE   10    // All LEDs fade in and out, next color with each breath
+  #define CUSTOM_EFFECT_CHASE     11    // Theater chase: spaced lit LEDs marching along
+  #define CUSTOM_EFFECT_SCANNER   12    // Larson scanner: an eye sweeping back and forth with a tail
+  #define CUSTOM_EFFECT_WIPE      13    // Each color in turn fills the LEDs
+  #define CUSTOM_EFFECT_LIGHTNING 14    // Random bursts of flashes on parts of the LEDs
+  #define CUSTOM_EFFECT_COUNT     15
 
   struct custom_mode_t {
     char name[CUSTOM_MODE_NAME_SIZE];
@@ -173,7 +182,7 @@
     uint8_t flags;        // CUSTOM_MODE_*
     uint8_t direction;    // Effect specific, see CUSTOM_EFFECTS
     uint8_t speed;        // 1..CUSTOM_MODE_MAX_SPEED
-    uint8_t repeat;       // Palette repetitions across the LEDs, 1..CUSTOM_MODE_MAX_REPEAT
+    uint8_t repeat;       // Effect specific amount (palette repeats, stars, flame height...), 1..CUSTOM_MODE_MAX_REPEAT
     uint8_t colors[CUSTOM_MODE_MAX_COLORS][3];
   };
 #endif
