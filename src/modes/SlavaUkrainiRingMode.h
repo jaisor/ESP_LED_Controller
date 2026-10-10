@@ -13,6 +13,6 @@ private:
     std::vector<CLEDSegment> segments;
 
 public:
-	CSlavaUkrainiRingMode(const uint16_t numLeds, const String name);
+	CSlavaUkrainiRingMode(const uint16_t numLeds, const uint16_t numLedsOutter, const String name);
     virtual void draw(CRGB *leds);
 };

@@ -11,9 +11,13 @@ const char htmlTop[] PROGMEM = R"=====(
     <title>%s - WiFi Climate Sensor</title>
     <script>
       document.addEventListener("DOMContentLoaded", function() {
-        document.querySelector("form").addEventListener("submit", function (event) {
+        // Plain POST forms; pages with their own submit handling use forms without a method
+        var form = document.querySelector("form[method]");
+        if (!form) return;
+        form.addEventListener("submit", function (event) {
           var data = this;
           var submit = data.querySelector("button[type='submit']");
+          var label = submit.innerHTML;
           var d = data.getAttribute("delay");
           submit.setAttribute("aria-busy", true);
           submit.setAttribute("disabled", "");
@@ -21,7 +25,18 @@ const char htmlTop[] PROGMEM = R"=====(
           fetch(data.getAttribute("action"), {
             method: data.getAttribute("method"),
             body: new FormData(data)
-          }).then(res=>res.text())
+          }).then(function (res) {
+              return res.text().then(function (text) {
+                if (res.status >= 400) {
+                  alert("Not saved: " + text);
+                  submit.removeAttribute("aria-busy");
+                  submit.removeAttribute("disabled");
+                  submit.innerHTML = label;
+                  throw null;
+                }
+                return text;
+              });
+            })
             .then(function (data) {
               console.log("Server response: " + data);
               setTimeout(function () {
@@ -30,6 +45,7 @@ const char htmlTop[] PROGMEM = R"=====(
               }, d);
             })
             .catch((e) => {
+              if (e === null) return; // rejected by the device, form left as is
               console.error(e);
               location.reload(true); 
             });
@@ -41,6 +57,7 @@ const char htmlTop[] PROGMEM = R"=====(
   <body>
     <header class="container">
       <span>🛜 %s <b>%i%%</b> ▪ </span>
+      %s
       <span>⌛<b>%02d:%02d:%02d</b></span>
       <nav>
         <ul><li>
@@ -53,6 +70,8 @@ const char htmlTop[] PROGMEM = R"=====(
           <details class="dropdown">
             <summary>⚙️</summary>
             <ul dir="rtl">
+              <li><a href="led">LED Setup 💡</a></li>
+              <li><a href="modes">Mode Configurator 🎨</a></li>
               <li><a href="wifi">WiFi 🛜</a></li>
               <li><a href="device">Device 📟</a></li>
             </ul>
@@ -101,18 +120,12 @@ const char htmlMain[] PROGMEM = R"=====(
       <h3>LED Settings</h3>
       <p><b>Current Mode:</b> %s <br/> <b>Next change:</b> %s</p>
       %s
+      <p>💡 %s <a href='led'>change</a></p>
       <form method='POST' action='/' enctype='application/x-www-form-urlencoded' delay='10000'>
         <fieldset>
           <label>
-            LED strip length
-            <input type='text' id='ledStripSize' name='ledStripSize' value='%u'>
-          </label>
-          <br/>
-          <label>
-            LED Type
-            <select name='ledType' id='ledType'>
-              %s
-            </select>
+            <input type='checkbox' role='switch' id='ledPower' name='ledPower' %s>
+            LEDs on
           </label>
           <br/>
           <label>
@@ -185,9 +198,9 @@ const char htmlDevice[] PROGMEM = R"=====(
       <form method='POST' action='device' enctype='application/x-www-form-urlencoded' delay='8000'>
         <fieldset>
           <label>
-            LED enabled
+            Status LED enabled
             <input name='ledEnabled' id='ledEnabled' type='checkbox' role='switch' %s /><br/>
-            <sub><small>disable to reduce light noise in bedrooms</small></sub>
+            <sub><small>the board's own LED, disable to reduce light noise in bedrooms</small></sub>
           </label>
           <br/>
           <label>
@@ -202,8 +215,606 @@ const char htmlDevice[] PROGMEM = R"=====(
             </select>
           </label>
         </fieldset>
+        <fieldset>
+          <legend><strong>📡 MQTT and Home Assistant</strong></legend>
+          <label>
+            MQTT server
+            <input type='text' id='mqttServer' name='mqttServer' value='%s' placeholder='e.g. homeassistant.local - blank disables MQTT'>
+          </label>
+          <label>
+            MQTT port
+            <input type='number' id='mqttPort' name='mqttPort' value='%u' min='1' max='65535'>
+          </label>
+          <label>
+            Username
+            <input type='text' id='mqttUser' name='mqttUser' value='%s' autocomplete='off' placeholder='blank for anonymous'>
+          </label>
+          <label>
+            Password
+            <input type='password' id='mqttPassword' name='mqttPassword' autocomplete='new-password' placeholder='%s'>
+          </label>
+          <label>
+            Base topic
+            <input type='text' id='mqttTopic' name='mqttTopic' value='%s'>
+            <sub><small>The device id is appended to keep devices apart</small></sub>
+          </label>
+          <label>
+            <input type='checkbox' role='switch' id='mqttDiscovery' name='mqttDiscovery' %s>
+            Home Assistant discovery
+            <br/><sub><small>Adds this device to Home Assistant as a light with brightness and the modes of the current layout as effects</small></sub>
+          </label>
+          <p><small>
+            Commands <code>%s/set</code>, state <code>%s/state</code>,
+            configuration JSON (same fields as the backup file) <code>%s/config</code>
+          </small></p>
+        </fieldset>
         <button type='submit' value='Submit'>Submit...</button>
       </form>
+      <h3>Backup</h3>
+      <fieldset>
+        <legend><strong>💾 Configuration file</strong></legend>
+        <p><small>Device, LED, power-save and time settings as JSON. The WiFi password is never exported.</small></p>
+        <a href='config' download='%s.json' role='button' class='secondary'>Export</a>
+        <br/><br/>
+        <label>
+          Import from file
+          <input type='file' id='importFile' accept='.json,application/json'>
+        </label>
+        <label>
+          <input type='checkbox' id='importWifi'>
+          Also import the WiFi network (SSID and power)
+        </label>
+        <button type='button' id='importButton'>Import and reboot...</button>
+        <small id='importStatus'></small>
+      </fieldset>
+      <script>
+        document.getElementById('importButton').addEventListener('click', function () {
+          var button = this;
+          var status = document.getElementById('importStatus');
+          var file = document.getElementById('importFile').files[0];
+          if (!file) {
+            status.textContent = 'Choose a configuration file first';
+            return;
+          }
+          file.text().then(function (text) {
+            var config = JSON.parse(text);
+            if (!config || typeof config !== 'object' || Array.isArray(config)) {
+              throw new Error('not a configuration object');
+            }
+            if (!document.getElementById('importWifi').checked) {
+              ['wifiSsid', 'wifiPassword', 'wifiPower'].forEach(function (k) { delete config[k]; });
+            }
+            button.setAttribute('aria-busy', 'true');
+            button.disabled = true;
+            status.textContent = '';
+            return fetch('config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(config)
+            });
+          }).then(function (res) {
+            return res.text().then(function (text) {
+              if (!res.ok) throw new Error(text);
+              status.textContent = 'Imported, rebooting...';
+              setTimeout(function () { location.reload(); }, 10000);
+            });
+          }).catch(function (e) {
+            status.textContent = 'Import failed: ' + e.message;
+            button.removeAttribute('aria-busy');
+            button.disabled = false;
+          });
+        });
+      </script>
+)=====";
+
+// data-layout values match LED_LAYOUT_IDS
+const char htmlLed[] PROGMEM = R"=====(
+      <h3>LED Setup</h3>
+      <p>💡 %s</p>
+      <form method='POST' action='led' enctype='application/x-www-form-urlencoded' delay='10000'>
+        <fieldset>
+          <label>
+            Layout
+            <select name='ledLayout' id='ledLayout'>
+              %s
+            </select>
+            <sub><small id='layoutHelp'></small></sub>
+          </label>
+          <br/>
+          <label>
+            LED chipset
+            <select name='ledType' id='ledType'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label>
+            Color order
+            <select name='ledColorOrder' id='ledColorOrder'>
+              %s
+            </select>
+            <sub><small>If colors come out wrong (red shows as green), try another order - most WS2812B strips are GRB</small></sub>
+          </label>
+        </fieldset>
+        <fieldset>
+          <legend><strong id='strip1Legend'>Strip</strong></legend>
+          <label>
+            Data pin
+            <select name='ledPin' id='ledPin'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label>
+            <span id='sizeLabel'>Number of LEDs</span>
+            <input type='number' id='ledStripSize' name='ledStripSize' min='1' max='%u' value='%u' required>
+          </label>
+          <div data-layout='ring'>
+            <label>
+              Outer ring LEDs
+              <input type='number' id='ledRingOuterSize' name='ledRingOuterSize' min='2' value='%u' required>
+              <sub><small>The inner ring gets the remaining <output id='innerSize'></output> LEDs</small></sub>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset data-layout='dual'>
+          <legend><strong>Second strip</strong></legend>
+          <label>
+            <input type='checkbox' role='switch' id='ledMirror' name='ledMirror' %s>
+            Mirror the first strip
+            <br/><sub><small>Both strips show the same pattern and the second strip uses the first strip's length</small></sub>
+          </label>
+          <br/>
+          <label>
+            Data pin
+            <select name='ledPin2' id='ledPin2'>
+              %s
+            </select>
+          </label>
+          <br/>
+          <label id='strip2Size'>
+            Number of LEDs
+            <input type='number' id='ledStripSize2' name='ledStripSize2' min='1' max='%u' value='%u' required>
+          </label>
+        </fieldset>
+        <p><small>Saving reboots the device. Modes that don't fit the new layout are skipped.</small></p>
+        <button type='submit' value='Submit'>Save and reboot...</button>
+      </form>
+      <script>
+        (function () {
+          var $ = function (id) { return document.getElementById(id); };
+          var layout = $('ledLayout'), mirror = $('ledMirror'), pin = $('ledPin'), pin2 = $('ledPin2');
+          var size = $('ledStripSize'), size2 = $('ledStripSize2'), outer = $('ledRingOuterSize');
+          var text = {
+            single: ['Strip', 'Number of LEDs', 'One strip on one data pin.'],
+            dual: ['First strip', 'Number of LEDs', 'Two strips on separate data pins, animated as one continuous strip or mirrored.'],
+            ring: ['Rings', 'Total LEDs (outer + inner ring)', 'One chain on one data pin, outer ring first, then the inner ring. Adds ring modes that animate each ring separately.']
+          };
+          function setEnabled(el, on) {
+            el.hidden = !on;
+            el.querySelectorAll('input, select').forEach(function (i) { i.disabled = !on; });
+          }
+          function update() {
+            var l = layout.value;
+            document.querySelectorAll('[data-layout]').forEach(function (e) {
+              setEnabled(e, e.getAttribute('data-layout') === l);
+            });
+            if (l === 'dual') setEnabled($('strip2Size'), !mirror.checked);
+            $('strip1Legend').textContent = text[l][0];
+            $('sizeLabel').textContent = text[l][1];
+            $('layoutHelp').textContent = text[l][2];
+            var total = parseInt(size.value, 10) || 0;
+            size.min = l === 'ring' ? 4 : 1;
+            outer.max = Math.max(2, total - 2);
+            $('innerSize').value = total - (parseInt(outer.value, 10) || 0);
+            pin2.setCustomValidity(l === 'dual' && pin2.value === pin.value ? 'Each strip needs its own data pin' : '');
+            var count = total + (l === 'dual' ? (mirror.checked ? total : (parseInt(size2.value, 10) || 0)) : 0);
+            size.setCustomValidity(count > parseInt(size.max, 10) ? 'At most ' + size.max + ' LEDs across all strips' : '');
+          }
+          [layout, mirror, pin, pin2, size, size2, outer].forEach(function (e) {
+            e.addEventListener('input', update);
+            e.addEventListener('change', update);
+          });
+          update();
+        })();
+      </script>
+)=====";
+
+// Rendered entirely from the JSON in %s (CWifiManager::customModesPageJson) - no other printf arguments,
+// so the template must not contain a literal percent sign
+const char htmlModes[] PROGMEM = R"=====(
+      <h3>Mode Configurator</h3>
+      <p>
+        Custom modes are added to the LED mode list on the main page. Effects are offered for the
+        current layout, <b id='layoutName'></b> (<a href='led'>change</a>).
+      </p>
+      <div id='savedModes'></div>
+      <div id='codeBox' hidden>
+        <label>
+          Mode code for <b id='codeName'></b>
+          <div role='group'>
+            <input type='text' id='codeOut' readonly>
+            <button type='button' id='copyCode'>Copy</button>
+          </div>
+          <sub><small>Paste it into the Mode Configurator of another controller</small></sub>
+        </label>
+      </div>
+      <article>
+        <form id='modeForm'>
+          <h4 id='formTitle'>New mode</h4>
+          <details id='pasteBox'>
+            <summary>Paste a mode code from another controller</summary>
+            <div role='group'>
+              <input type='text' id='codeIn' placeholder='{"name": ...}' autocomplete='off'>
+              <button type='button' class='secondary' id='loadCode'>Load</button>
+            </div>
+            <sub><small id='codeStatus'></small></sub>
+          </details>
+          <fieldset>
+            <label>
+              Name
+              <input type='text' id='name' maxlength='23' required placeholder='e.g. Sunset'>
+            </label>
+            <label>
+              Effect
+              <select id='effect'></select>
+              <sub><small id='effectHelp'></small></sub>
+            </label>
+            <label id='directionField'>
+              Direction
+              <select id='direction'></select>
+            </label>
+            <label id='ringsField'>
+              Rings
+              <select id='rings'>
+                <option value='both'>Both rings</option>
+                <option value='outer'>Outer ring only</option>
+                <option value='inner'>Inner ring only</option>
+              </select>
+            </label>
+          </fieldset>
+          <fieldset>
+            <legend><strong>Colors</strong></legend>
+            <div id='colors' style='display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem'></div>
+            <button type='button' class='secondary outline' id='addColor'>+ Add color</button>
+            <label>
+              <input type='checkbox' role='switch' id='smooth' checked>
+              Gradual transition between colors
+              <br/><sub><small>Off: each color is a solid band with hard edges</small></sub>
+            </label>
+          </fieldset>
+          <fieldset>
+            <label id='repeatField'>
+              <span id='repeatName'></span> <output id='repeatOut'></output>
+              <input type='range' id='repeat' min='1' max='10'>
+              <sub><small id='repeatHelp'></small></sub>
+            </label>
+            <label>
+              Speed <output id='speedOut'></output>
+              <input type='range' id='speed' min='1' max='10'>
+              <sub><small>Also scaled by the frame delay on the main page</small></sub>
+            </label>
+          </fieldset>
+          <div role='group'>
+            <button type='submit' id='saveButton'>Save and show</button>
+            <button type='button' class='secondary' id='newButton'>New mode</button>
+          </div>
+        </form>
+      </article>
+      <script>
+        (function () {
+          var data = %s;
+          var editing = -1; // slot being edited, -1 for a new mode
+          var codeSlot = -1; // slot whose code is shown, -1 for none
+          var $ = function (id) { return document.getElementById(id); };
+
+          function effectById(id) {
+            return data.effects.find(function (e) { return e.id === id; });
+          }
+
+          function swatch(color) {
+            var s = document.createElement('span');
+            s.style.cssText = 'display:inline-block;width:1.2rem;height:1.2rem;margin-right:2px;border-radius:3px;vertical-align:middle;background:' + color;
+            return s;
+          }
+
+          function button(label, cls, onClick) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = cls;
+            b.textContent = label;
+            b.style.cssText = 'padding:0.25rem 0.75rem;margin:0 0.25rem 0 0';
+            b.addEventListener('click', onClick);
+            return b;
+          }
+
+          function renderSaved() {
+            $('layoutName').textContent = data.layout;
+            var box = $('savedModes');
+            box.innerHTML = '';
+            if (!data.modes.length) {
+              box.innerHTML = '<p><i>No custom modes yet - define one below.</i></p>';
+              return;
+            }
+            var table = document.createElement('table');
+            table.innerHTML = '<thead><tr><th>Name</th><th>Effect</th><th>Colors</th><th></th></tr></thead>';
+            var body = table.createTBody();
+            data.modes.forEach(function (m) {
+              var row = body.insertRow();
+              var name = row.insertCell();
+              name.textContent = m.name;
+              if (m.index === data.currentMode) {
+                var now = document.createElement('small');
+                now.textContent = ' (showing)';
+                name.appendChild(now);
+              }
+              var effect = row.insertCell();
+              effect.textContent = effectById(m.effect).label;
+              if (!m.available) {
+                var na = document.createElement('small');
+                na.textContent = ' - not available on this layout';
+                effect.appendChild(na);
+              }
+              var colors = row.insertCell();
+              m.colors.forEach(function (c) { colors.appendChild(swatch(c)); });
+              var actions = row.insertCell();
+              actions.appendChild(button('Edit', 'secondary', function () { edit(m); }));
+              actions.appendChild(button('Code', 'secondary outline', function () { showCode(m); }));
+              actions.appendChild(button('Delete', 'secondary outline', function () {
+                if (!confirm('Delete "' + m.name + '"?')) return;
+                send({ slot: m.slot, delete: true }, this).then(function () {
+                  if (editing === m.slot) edit(null);
+                }).catch(function () {});
+              }));
+            });
+            box.appendChild(table);
+            var used = document.createElement('p');
+            used.innerHTML = '<small>' + data.modes.length + ' of ' + data.slots + ' custom mode slots used</small>';
+            box.appendChild(used);
+          }
+
+          // A mode code is what another controller needs to recreate the mode; slot and index are local
+          function modeCode(m) {
+            return JSON.stringify({
+              name: m.name, effect: m.effect, colors: m.colors, smooth: m.smooth,
+              direction: m.direction, rings: m.rings || 'both', speed: m.speed, repeat: m.repeat
+            });
+          }
+
+          function showCode(m) {
+            codeSlot = m ? m.slot : -1;
+            $('codeBox').hidden = !m;
+            if (!m) return;
+            $('codeName').textContent = m.name;
+            $('codeOut').value = modeCode(m);
+            $('codeOut').focus();
+            $('codeOut').select();
+          }
+
+          // Keeps the shown code in step with saves and deletes
+          function refreshCode() {
+            if (codeSlot < 0) return;
+            var m = data.modes.find(function (x) { return x.slot === codeSlot; });
+            showCode(m || null);
+          }
+
+          function clamp(value, low, high, fallback) {
+            var n = parseInt(value, 10);
+            return isNaN(n) ? fallback : Math.min(high, Math.max(low, n));
+          }
+
+          // Validated the same way the controller will, so mistakes show up before saving
+          function parseCode(text) {
+            var m;
+            try {
+              m = JSON.parse(text);
+            } catch (e) {
+              throw new Error('not valid JSON - copy the whole code');
+            }
+            if (!m || typeof m !== 'object' || Array.isArray(m)) throw new Error('not a mode code');
+            if (typeof m.name !== 'string' || !m.name.trim()) throw new Error('the code has no name');
+            var e = effectById(m.effect);
+            if (!e) throw new Error('effect "' + m.effect + '" is not supported by this controller');
+            if (!Array.isArray(m.colors) || !m.colors.length || m.colors.length > data.maxColors
+                || !m.colors.every(function (c) { return /^#[0-9a-f]{6}$/i.test(c); })) {
+              throw new Error('colors must be 1 to ' + data.maxColors + ' #rrggbb values');
+            }
+            // Direction picks an option, so an unknown one falls back to the first rather than the nearest
+            var directions = e.directions ? e.directions.split('|').length : 1;
+            var direction = parseInt(m.direction, 10);
+            return {
+              slot: -1,
+              name: m.name.trim().slice(0, 23),
+              effect: e.id,
+              colors: m.colors.map(function (c) { return c.toLowerCase(); }),
+              smooth: m.smooth !== false,
+              rings: ['both', 'outer', 'inner'].indexOf(m.rings) >= 0 ? m.rings : 'both',
+              direction: direction >= 0 && direction < directions ? direction : 0,
+              speed: clamp(m.speed, 1, 10, 3),
+              repeat: clamp(m.repeat, 1, 10, 1)
+            };
+          }
+
+          function loadCode() {
+            var status = $('codeStatus');
+            var m;
+            try {
+              m = parseCode($('codeIn').value.trim());
+            } catch (e) {
+              status.textContent = "Can't load: " + e.message;
+              return;
+            }
+            edit(m);
+            $('formTitle').textContent = 'New mode "' + m.name + '" (from code, not saved yet)';
+            status.textContent = effectById(m.effect).available
+              ? 'Loaded below - review it and save.'
+              : 'Loaded below. Its effect does not fit this layout, so once saved it stays hidden until the layout changes.';
+          }
+
+          function updateColorButtons() {
+            var items = $('colors').children;
+            $('addColor').disabled = items.length >= data.maxColors;
+            for (var i = 0; i < items.length; i++) {
+              items[i].querySelector('button').disabled = items.length < 2;
+            }
+          }
+
+          function addColor(value) {
+            var item = document.createElement('div');
+            item.style.cssText = 'display:flex;align-items:center;gap:0.25rem';
+            var input = document.createElement('input');
+            input.type = 'color';
+            input.value = value;
+            input.style.cssText = 'width:3.5rem;height:2.5rem;padding:0.1rem;margin:0';
+            item.appendChild(input);
+            item.appendChild(button('x', 'secondary outline', function () {
+              item.remove();
+              updateColorButtons();
+            }));
+            $('colors').appendChild(item);
+            updateColorButtons();
+          }
+
+          function fillEffects(current) {
+            var select = $('effect');
+            select.innerHTML = '';
+            data.effects.forEach(function (e) {
+              // Keep an edited mode's effect even if it doesn't fit this layout, so saving doesn't change it
+              if (e.available || e.id === current) {
+                select.add(new Option(e.label + (e.available ? '' : ' (not on this layout)'), e.id));
+              }
+            });
+            if (current) select.value = current;
+          }
+
+          function updateEffect() {
+            var e = effectById($('effect').value);
+            $('effectHelp').textContent = e.help;
+            var direction = $('direction');
+            var previous = direction.value;
+            direction.innerHTML = '';
+            if (e.directions) {
+              e.directions.split('|').forEach(function (label, i) { direction.add(new Option(label, i)); });
+            }
+            if (previous !== '' && previous < direction.options.length) direction.value = previous;
+            $('directionField').hidden = !e.directions;
+            // Hidden elsewhere, but the value is kept and saved so the mode is unchanged back on a ring
+            $('ringsField').hidden = !(e.ringSelect && data.layoutId === 'ring');
+            // The repeat slider means something different per effect (palette repeats, stars, flame height...)
+            $('repeatField').hidden = !e.repeatLabel;
+            $('repeatName').textContent = e.repeatLabel || '';
+            $('repeatHelp').textContent = e.repeatHelp || '';
+          }
+
+          function updateOutputs() {
+            $('speedOut').value = $('speed').value;
+            $('repeatOut').value = $('repeat').value;
+          }
+
+          function edit(m) {
+            editing = m ? m.slot : -1;
+            $('formTitle').textContent = m ? 'Edit "' + m.name + '"' : 'New mode';
+            $('name').value = m ? m.name : '';
+            fillEffects(m ? m.effect : null);
+            $('direction').innerHTML = '';
+            updateEffect();
+            $('direction').value = m ? m.direction : 0;
+            $('colors').innerHTML = '';
+            (m ? m.colors : ['#ff0000', '#0000ff']).forEach(addColor);
+            $('smooth').checked = m ? m.smooth : true;
+            $('rings').value = (m && m.rings) || 'both';
+            $('speed').value = m ? m.speed : 3;
+            $('repeat').value = m ? m.repeat : 1;
+            updateOutputs();
+            if (m) $('modeForm').scrollIntoView({ behavior: 'smooth' });
+          }
+
+          function send(body, trigger) {
+            trigger.setAttribute('aria-busy', 'true');
+            trigger.disabled = true;
+            return fetch('modes', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body)
+            }).then(function (res) {
+              return res.text().then(function (text) {
+                if (!res.ok) throw new Error(text);
+                return JSON.parse(text);
+              });
+            }).then(function (d) {
+              data = d;
+              renderSaved();
+              refreshCode();
+              return d;
+            }).catch(function (e) {
+              alert('Not saved: ' + e.message);
+              throw e;
+            }).finally(function () {
+              trigger.removeAttribute('aria-busy');
+              trigger.disabled = false;
+            });
+          }
+
+          $('modeForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+            var body = {
+              name: $('name').value.trim(),
+              effect: $('effect').value,
+              direction: parseInt($('direction').value, 10) || 0,
+              colors: Array.prototype.map.call($('colors').querySelectorAll('input'), function (i) { return i.value; }),
+              smooth: $('smooth').checked,
+              rings: $('rings').value,
+              speed: parseInt($('speed').value, 10),
+              repeat: parseInt($('repeat').value, 10),
+              activate: true
+            };
+            if (editing >= 0) body.slot = editing;
+            send(body, $('saveButton')).then(function (d) {
+              // Keep editing what was just saved, so further tweaks update it instead of adding copies
+              var saved = d.modes.find(function (m) { return m.slot === d.savedSlot; });
+              if (saved) {
+                editing = saved.slot;
+                $('formTitle').textContent = 'Edit "' + saved.name + '"';
+              }
+            }).catch(function () {});
+          });
+          $('effect').addEventListener('change', updateEffect);
+          $('addColor').addEventListener('click', function () {
+            var inputs = $('colors').querySelectorAll('input');
+            addColor(inputs.length ? inputs[inputs.length - 1].value : '#ffffff');
+          });
+          $('newButton').addEventListener('click', function () { edit(null); });
+          $('loadCode').addEventListener('click', loadCode);
+          $('codeIn').addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {  // Would submit the mode form otherwise
+              event.preventDefault();
+              loadCode();
+            }
+          });
+          $('codeOut').addEventListener('focus', function () { this.select(); });
+          $('copyCode').addEventListener('click', function () {
+            var trigger = this;
+            var done = function () {
+              trigger.textContent = 'Copied';
+              setTimeout(function () { trigger.textContent = 'Copy'; }, 1500);
+            };
+            $('codeOut').select();
+            // The Clipboard API needs HTTPS, which the controller doesn't serve; execCommand works over HTTP
+            if (navigator.clipboard && window.isSecureContext) {
+              navigator.clipboard.writeText($('codeOut').value).then(done, function () {
+                if (document.execCommand('copy')) done();
+              });
+            } else if (document.execCommand('copy')) {
+              done();
+            }
+          });
+          $('speed').addEventListener('input', updateOutputs);
+          $('repeat').addEventListener('input', updateOutputs);
+
+          renderSaved();
+          edit(null);
+        })();
+      </script>
 )=====";
 
 const char cssPico[] PROGMEM = R"=====(

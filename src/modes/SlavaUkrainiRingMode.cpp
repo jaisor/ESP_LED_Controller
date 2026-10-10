@@ -51,15 +51,15 @@ extern const TProgmemRGBPalette16 S2_p FL_PROGMEM =
     S2C2,
 };
 
-CSlavaUkrainiRingMode::CSlavaUkrainiRingMode(const uint16_t numLeds, const String name)
+CSlavaUkrainiRingMode::CSlavaUkrainiRingMode(const uint16_t numLeds, const uint16_t numLedsOutter, const String name)
 : CBaseMode(numLeds, name), increment(255.0 / (float)numLeds), blendType(LINEARBLEND), delay(15) {
     Log.noticeln("Mode '%s', increment: '%D'", name, increment);
-    segments.push_back(CLEDSegment(0, OUTTER_RING_SIZE * 0.25, S1_p));
-    segments.push_back(CLEDSegment(OUTTER_RING_SIZE * 0.25, OUTTER_RING_SIZE * 0.75, S2_p));
-    segments.push_back(CLEDSegment(OUTTER_RING_SIZE * 0.75, OUTTER_RING_SIZE, S1_p));
-    segments.push_back(CLEDSegment(OUTTER_RING_SIZE, OUTTER_RING_SIZE + (numLeds - OUTTER_RING_SIZE) * 0.25, S1_p));
-    segments.push_back(CLEDSegment(OUTTER_RING_SIZE + (numLeds - OUTTER_RING_SIZE) * 0.25, OUTTER_RING_SIZE + (numLeds - OUTTER_RING_SIZE) * 0.75, S2_p));
-    segments.push_back(CLEDSegment(OUTTER_RING_SIZE + (numLeds - OUTTER_RING_SIZE) * 0.75, numLeds, S1_p));
+    segments.push_back(CLEDSegment(0, numLedsOutter * 0.25, S1_p));
+    segments.push_back(CLEDSegment(numLedsOutter * 0.25, numLedsOutter * 0.75, S2_p));
+    segments.push_back(CLEDSegment(numLedsOutter * 0.75, numLedsOutter, S1_p));
+    segments.push_back(CLEDSegment(numLedsOutter, numLedsOutter + (numLeds - numLedsOutter) * 0.25, S1_p));
+    segments.push_back(CLEDSegment(numLedsOutter + (numLeds - numLedsOutter) * 0.25, numLedsOutter + (numLeds - numLedsOutter) * 0.75, S2_p));
+    segments.push_back(CLEDSegment(numLedsOutter + (numLeds - numLedsOutter) * 0.75, numLeds, S1_p));
 }
 
 void CSlavaUkrainiRingMode::draw(CRGB *leds) {

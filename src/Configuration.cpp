@@ -2,8 +2,14 @@
 #include <EEPROM.h>
 #include <version.h>
 #include "Configuration.h"
+#ifdef LED
+  #include <FastLED.h>
+  #include "modes/CustomMode.h"
+#endif
 
 configuration_t configuration;
+// ESP8266 emulates EEPROM in a single 4KB flash sector
+static_assert(EEPROM_CONFIGURATION_START + sizeof(configuration_t) <= 4096, "configuration_t no longer fits in EEPROM");
 #ifdef WEB_LOGGING
   StringPrint logStream;
 
@@ -103,7 +109,60 @@ void EEPROM_loadConfig() {
       #endif
     #endif
     configuration.ledEnabled = false;
+    #ifdef LED
+      configuration._ledLoaded[0] = '\0';
+      configuration._customModesLoaded[0] = '\0';
+    #endif
+    configuration._mqttLoaded[0] = '\0';
   }
+
+#ifdef LED
+  if (strcmp(configuration._ledLoaded, "led")) {
+    // Blank, or saved by firmware that had the LED hardware compiled in - use those same defaults
+    Log.infoln("No LED hardware configuration, loading defaults");
+    strcpy(configuration._ledLoaded, "led");
+    configuration.ledLayout = LED_LAYOUT;
+    configuration.ledPin = LED_PIN;
+    configuration.ledPin2 = LED_PIN_2;
+    configuration.ledColorOrder = static_cast<uint8_t>(LED_COLOR_ORDER);
+    configuration.ledStripSize2 = LED_STRIP_SIZE_2;
+    configuration.ledRingOuterSize = LED_RING_OUTER_SIZE;
+    configuration.ledMirror = false;
+  }
+  if (strcmp(configuration._customModesLoaded, "cm1")) {
+    Log.infoln("No custom modes, clearing slots");
+    strcpy(configuration._customModesLoaded, "cm1");
+    memset(configuration.customModes, 0, sizeof(configuration.customModes));
+  }
+#endif
+
+  if (strcmp(configuration._mqttLoaded, "mq1")) {
+    Log.infoln("No MQTT configuration, loading defaults");
+    strcpy(configuration._mqttLoaded, "mq1");
+    #ifdef LED
+      configuration.ledPower = true;
+    #endif
+    #ifdef WIFI
+      strcpy(configuration.mqttServer, "");
+      configuration.mqttPort = MQTT_PORT;
+      strcpy(configuration.mqttUser, "");
+      strcpy(configuration.mqttPassword, "");
+      strcpy(configuration.mqttTopic, MQTT_TOPIC);
+      configuration.mqttDiscovery = true;
+    #endif
+  }
+#ifdef WIFI
+  configuration.mqttServer[sizeof(configuration.mqttServer) - 1] = '\0';
+  configuration.mqttUser[sizeof(configuration.mqttUser) - 1] = '\0';
+  configuration.mqttPassword[sizeof(configuration.mqttPassword) - 1] = '\0';
+  configuration.mqttTopic[sizeof(configuration.mqttTopic) - 1] = '\0';
+  if (configuration.mqttPort == 0) {
+    configuration.mqttPort = MQTT_PORT;
+  }
+  if (!strlen(configuration.mqttTopic)) {
+    strcpy(configuration.mqttTopic, MQTT_TOPIC);
+  }
+#endif
 
 #ifdef LED
   if (isnan(configuration.ledBrightness)) {
@@ -145,6 +204,71 @@ void EEPROM_loadConfig() {
   if (isnan(configuration.cycleModesCount) || configuration.cycleModesCount > 32) {
     Log.verboseln("Invalid cycleModesCount");
     configuration.cycleModesCount = 0;
+  }
+
+  // LED hardware - a bad value here means no light at all, so repair field by field
+  if (configuration.ledType >= LED_TYPE_COUNT) {
+    Log.verboseln("Invalid ledType");
+    configuration.ledType = 0;
+  }
+  if (configuration.ledLayout >= LED_LAYOUT_COUNT) {
+    Log.verboseln("Invalid ledLayout");
+    configuration.ledLayout = LED_LAYOUT;
+  }
+  if (!CONFIG_isValidLedPin(configuration.ledPin)) {
+    Log.verboseln("Invalid ledPin");
+    configuration.ledPin = LED_PIN;
+  }
+  if (!CONFIG_isValidLedPin(configuration.ledPin2)) {
+    Log.verboseln("Invalid ledPin2");
+    configuration.ledPin2 = LED_PIN_2;
+  }
+  if (CONFIG_ledColorOrderName(configuration.ledColorOrder) == nullptr) {
+    Log.verboseln("Invalid ledColorOrder");
+    configuration.ledColorOrder = static_cast<uint8_t>(LED_COLOR_ORDER);
+  }
+  if (configuration.ledStripSize == 0 || configuration.ledStripSize > LED_MAX_COUNT) {
+    Log.verboseln("Invalid ledStripSize");
+    configuration.ledStripSize = LED_STRIP_SIZE;
+  }
+  if (configuration.ledStripSize2 == 0 || configuration.ledStripSize2 > LED_MAX_COUNT) {
+    Log.verboseln("Invalid ledStripSize2");
+    configuration.ledStripSize2 = LED_STRIP_SIZE_2;
+  }
+  configuration.ledMirror = configuration.ledMirror ? 1 : 0;
+  if (configuration.ledLayout == LED_LAYOUT_RING && configuration.ledStripSize >= 4) {
+    configuration.ledRingOuterSize = constrain(configuration.ledRingOuterSize, 2, configuration.ledStripSize - 2);
+  }
+  const char *ledError = CONFIG_checkLedHardware(configuration);
+  if (ledError) {
+    // Whatever is left (pins shared between strips, too many LEDs, ring too small) - fall back to one strip
+    Log.warningln("LED hardware configuration invalid (%s), using a single strip", ledError);
+    configuration.ledLayout = LED_LAYOUT_SINGLE;
+  }
+
+  for (uint8_t i = 0; i < CUSTOM_MODE_COUNT; i++) {
+    custom_mode_t &m = configuration.customModes[i];
+    if (m.effect == CUSTOM_EFFECT_NONE) {
+      continue;
+    }
+    if (m.effect >= CUSTOM_EFFECT_COUNT) {
+      Log.verboseln("Invalid custom mode %d, clearing", i);
+      memset(&m, 0, sizeof(m));
+      continue;
+    }
+    m.name[CUSTOM_MODE_NAME_SIZE - 1] = '\0';
+    if (!strlen(m.name)) {
+      snprintf(m.name, sizeof(m.name), "Custom %d", i + 1);
+    }
+    m.colorCount = constrain(m.colorCount, 1, CUSTOM_MODE_MAX_COLORS);
+    m.speed = constrain(m.speed, 1, CUSTOM_MODE_MAX_SPEED);
+    m.repeat = constrain(m.repeat, 1, CUSTOM_MODE_MAX_REPEAT);
+    if (m.direction >= CUSTOM_effectDirectionCount(m.effect)) {
+      m.direction = 0;
+    }
+    if ((m.flags & CUSTOM_MODE_RING_OUTER) && (m.flags & CUSTOM_MODE_RING_INNER)) {
+      m.flags &= ~(CUSTOM_MODE_RING_OUTER | CUSTOM_MODE_RING_INNER);  // Neither ring alone means both
+    }
   }
 #endif
 
@@ -297,6 +421,107 @@ float CONFIG_getLedBrightness(bool force) {
   #else
     currentLedBrightness = configuration.ledBrightness;
   #endif
-  return currentLedBrightness;
+  return configuration.ledPower ? currentLedBrightness : 0;
+}
+#endif
+
+#ifdef LED
+const char * const LED_TYPE_NAMES[] = {"WS2812B", "WS2812", "WS2813", "WS2815", "SK6812", "TM1809", "TM1804", "TM1803", "UCS1903", "UCS1904", "GS1903", "PL9823", "WS2852", "WS2811"};
+const uint8_t LED_TYPE_COUNT = sizeof(LED_TYPE_NAMES) / sizeof(LED_TYPE_NAMES[0]);
+
+#define LED_COLOR_ORDER_ENTRY(order) { static_cast<uint8_t>(order), #order }
+const led_option_t LED_COLOR_ORDERS[] = {
+  LED_COLOR_ORDER_ENTRY(RGB), LED_COLOR_ORDER_ENTRY(RBG), LED_COLOR_ORDER_ENTRY(GRB),
+  LED_COLOR_ORDER_ENTRY(GBR), LED_COLOR_ORDER_ENTRY(BRG), LED_COLOR_ORDER_ENTRY(BGR)
+};
+#undef LED_COLOR_ORDER_ENTRY
+const uint8_t LED_COLOR_ORDER_COUNT = sizeof(LED_COLOR_ORDERS) / sizeof(LED_COLOR_ORDERS[0]);
+
+const char * const LED_LAYOUT_IDS[] = {"single", "dual", "ring"};
+const char * const LED_LAYOUT_LABELS[] = {"Single strip", "Dual strip", "Ring light"};
+static_assert(sizeof(LED_LAYOUT_IDS) / sizeof(LED_LAYOUT_IDS[0]) == LED_LAYOUT_COUNT, "LED_LAYOUT_IDS out of sync");
+static_assert(sizeof(LED_LAYOUT_LABELS) / sizeof(LED_LAYOUT_LABELS[0]) == LED_LAYOUT_COUNT, "LED_LAYOUT_LABELS out of sync");
+
+#define LED_PIN_ENTRY(pin) pin,
+const uint8_t LED_PINS[] = { LED_PIN_LIST(LED_PIN_ENTRY) };
+#undef LED_PIN_ENTRY
+const uint8_t LED_PIN_COUNT = sizeof(LED_PINS) / sizeof(LED_PINS[0]);
+
+const char* CONFIG_ledColorOrderName(uint8_t order) {
+  for (uint8_t i = 0; i < LED_COLOR_ORDER_COUNT; i++) {
+    if (LED_COLOR_ORDERS[i].value == order) {
+      return LED_COLOR_ORDERS[i].name;
+    }
+  }
+  return nullptr;
+}
+
+int CONFIG_ledColorOrderFromName(const char *name) {
+  for (uint8_t i = 0; name && i < LED_COLOR_ORDER_COUNT; i++) {
+    if (!strcasecmp(LED_COLOR_ORDERS[i].name, name)) {
+      return LED_COLOR_ORDERS[i].value;
+    }
+  }
+  return -1;
+}
+
+int CONFIG_ledLayoutFromName(const char *name) {
+  for (uint8_t i = 0; name && i < LED_LAYOUT_COUNT; i++) {
+    if (!strcasecmp(LED_LAYOUT_IDS[i], name)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+bool CONFIG_isValidLedPin(uint8_t pin) {
+  // Pins the firmware drives for something else
+  if (pin == INTERNAL_LED_PIN) return false;
+  #if (defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)) && defined(OLED)
+    if (pin == GPIO_NUM_5 || pin == GPIO_NUM_6) return false;  // OLED I2C, see CDevice
+  #endif
+  #ifdef BUTTONS
+    if (pin == BUTTON_1_PIN || pin == BUTTON_2_PIN) return false;
+  #endif
+  for (uint8_t i = 0; i < LED_PIN_COUNT; i++) {
+    if (LED_PINS[i] == pin) {
+      return true;
+    }
+  }
+  return false;
+}
+
+uint16_t CONFIG_getLedCount(const configuration_t &c) {
+  if (c.ledLayout == LED_LAYOUT_DUAL) {
+    return c.ledStripSize + (c.ledMirror ? c.ledStripSize : c.ledStripSize2);
+  }
+  return c.ledStripSize;
+}
+
+bool CONFIG_ledHardwareEquals(const configuration_t &a, const configuration_t &b) {
+  return a.ledLayout == b.ledLayout && a.ledType == b.ledType && a.ledColorOrder == b.ledColorOrder
+    && a.ledPin == b.ledPin && a.ledPin2 == b.ledPin2 && a.ledStripSize == b.ledStripSize
+    && a.ledStripSize2 == b.ledStripSize2 && a.ledRingOuterSize == b.ledRingOuterSize && a.ledMirror == b.ledMirror;
+}
+
+const char* CONFIG_checkLedHardware(const configuration_t &c) {
+  if (c.ledLayout >= LED_LAYOUT_COUNT) return "unknown layout";
+  if (c.ledType >= LED_TYPE_COUNT) return "unknown LED chipset";
+  if (!CONFIG_ledColorOrderName(c.ledColorOrder)) return "unknown color order";
+  if (!CONFIG_isValidLedPin(c.ledPin)) return "data pin not available on this board";
+  if (c.ledStripSize == 0) return "number of LEDs must be at least 1";
+  if (c.ledLayout == LED_LAYOUT_DUAL) {
+    if (!CONFIG_isValidLedPin(c.ledPin2)) return "second strip data pin not available on this board";
+    if (c.ledPin2 == c.ledPin) return "each strip needs its own data pin";
+    if (!c.ledMirror && c.ledStripSize2 == 0) return "second strip needs at least 1 LED";
+  }
+  if (c.ledLayout == LED_LAYOUT_RING) {
+    if (c.ledStripSize < 4) return "a ring light needs at least 4 LEDs";
+    if (c.ledRingOuterSize < 2 || c.ledRingOuterSize > c.ledStripSize - 2) return "each ring needs at least 2 LEDs";
+  }
+  if ((uint32_t)c.ledStripSize + (c.ledLayout == LED_LAYOUT_DUAL ? (c.ledMirror ? c.ledStripSize : c.ledStripSize2) : 0) > LED_MAX_COUNT) {
+    return "too many LEDs";
+  }
+  return nullptr;
 }
 #endif
