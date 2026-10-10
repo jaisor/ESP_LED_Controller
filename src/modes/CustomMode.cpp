@@ -31,7 +31,7 @@ const custom_effect_t CUSTOM_EFFECTS[CUSTOM_EFFECT_COUNT] = {
     "Flame height", "Higher lets the heat travel further before it cools",
     "A fire simulation. List the colors from the coolest to the hottest part of the flame, e.g. red, orange, "
     "yellow; the coldest parts fade to black. Speed sets how often new sparks flare up. On a ring light "
-    "each ring burns on its own.", true },
+    "each ring burns on its own; with only one ring burning, the other glows in the first color.", true },
   { "breathe", "Breathing", LED_LAYOUTS_ALL, nullptr, nullptr, nullptr,
     "All LEDs slowly glow up and fade out, taking the next color with each breath." },
   { "chase", "Theater chase", LED_LAYOUTS_ALL, "Forward|Backward",
@@ -280,7 +280,7 @@ void CCustomMode::drawStars(CRGB *leds, const custom_mode_t &m, bool tick) {
 }
 
 // Fire2012 (Mark Kriegsman): cool every cell, drift heat away from the base, ignite sparks at the base.
-// On a ring layout each ring burns on its own, and CUSTOM_MODE_RING_* can leave one of them dark.
+// On a ring layout each ring burns on its own; with CUSTOM_MODE_RING_* the other ring glows in the first color.
 void CCustomMode::drawFire(CRGB *leds, const custom_mode_t &m, bool tick) {
   if (!heat) {
     heat = new (std::nothrow) uint8_t[numLeds]();
@@ -295,13 +295,14 @@ void CCustomMode::drawFire(CRGB *leds, const custom_mode_t &m, bool tick) {
   }
 
   const uint16_t inner = numLeds - numLedsOutter;
+  const CRGB firstColor(m.colors[0][0], m.colors[0][1], m.colors[0][2]);
   if (m.flags & CUSTOM_MODE_RING_INNER) {
-    fill_solid(leds, numLedsOutter, CRGB::Black);
+    fill_solid(leds, numLedsOutter, firstColor);
   } else {
     burnSegment(leds, m, tick, 0, numLedsOutter);
   }
   if (m.flags & CUSTOM_MODE_RING_OUTER) {
-    fill_solid(leds + numLedsOutter, inner, CRGB::Black);
+    fill_solid(leds + numLedsOutter, inner, firstColor);
   } else {
     burnSegment(leds, m, tick, numLedsOutter, inner);
   }

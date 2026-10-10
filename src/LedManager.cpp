@@ -14,6 +14,7 @@
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
 #include "modes/CustomMode.h"
+#include "ModeCycle.h"
 
 #if FASTLED_HAS_CHANNELS && FASTLED_RMT5
   #include "platforms/esp/32/drivers/rmt/rmt_5/rmt_memory_manager.h"
@@ -173,7 +174,7 @@ static inline CRGB toWireOrder(const CRGB &c, uint8_t order) {
 
 CLEDManager::CLEDManager()
 : leds(nullptr), hwLeds(nullptr), renderSize(0), hwSize(0), layout(LED_LAYOUT_SINGLE), colorOrder(static_cast<uint8_t>(RGB)), mirror(false),
-  chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
+  chargingMode(nullptr), tsCycleMs(0), isCharging(false), wasCharging(false) {}
 
 CLEDManager::~CLEDManager() {
   for (auto *mode : modes) {
@@ -405,19 +406,12 @@ void CLEDManager::updateModeCycling() {
 
   tsCycleMs = millis();
 
-  // Step to the next mode that fits this layout, from the custom list if it has any such mode
-  bool found = false;
-  for (uint8_t i = 0; i < configuration.cycleModesCount && !found; i++) {
-    cycleIndex = (cycleIndex + 1) % configuration.cycleModesCount;
-    if (isModeAvailable(configuration.cycleModesList[cycleIndex])) {
-      configuration.ledMode = configuration.cycleModesList[cycleIndex];
-      found = true;
-    }
+  uint8_t next = nextCycleMode(configuration.ledMode, configuration.cycleModesList, configuration.cycleModesCount,
+    modes.size(), [this](uint8_t mode) { return isModeAvailable(mode); });
+  if (next == configuration.ledMode) {
+    return;  // A single selected mode: nothing to switch to
   }
-  for (size_t i = 0; i < modes.size() && !found; i++) {
-    configuration.ledMode = (configuration.ledMode + 1) % modes.size();
-    found = isModeAvailable(configuration.ledMode);
-  }
+  configuration.ledMode = next;
 
   if (onModeChange) {
     onModeChange();

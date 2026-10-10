@@ -8,10 +8,10 @@
 * WiFi connected and managed
     * creates a default AP, listening to http://192.168.4.1
     * capable of joining existing 2.4GHz networks
-    * serves a webpage for managing LED - mode, brightness, cycling and power-save hours
+    * serves a webpage for managing LED - modes, brightness and power-save hours; select one mode to keep it, or several to cycle through them at a set interval
     * LED setup page (`/led`) - layout (single strip, dual strip, ring light), LED count, data pin(s), chipset and color order
     * configuration export and import as a JSON file on the Device page
-    * Mode Configurator (`/modes`) - define up to 8 custom modes: name, color palette (up to 8 colors, smooth or hard transitions), effect, direction, speed and palette repeats. Effects depend on the layout: color fade, edge to edge, twinkle, falling stars, flickering flame (from either end, both ends or the center - on a ring light in one or both rings), breathing, theater chase, scanner, color wipe and lightning everywhere, center to edge on strips, circling, ring halves and ring to ring on a ring light. A mode's **Code** button shows it as a short JSON code that can be pasted into another controller's configurator
+    * Mode Configurator (`/modes`) - define up to 8 custom modes: name, color palette (up to 8 colors, smooth or hard transitions), effect, direction, speed and palette repeats. Effects depend on the layout: color fade, edge to edge, twinkle, falling stars, flickering flame (from either end, both ends or the center - on a ring light in one or both rings, a ring left out glowing in the first color), breathing, theater chase, scanner, color wipe and lightning everywhere, center to edge on strips, circling, ring halves and ring to ring on a ring light. A mode's **Code** button shows it as a short JSON code that can be pasted into another controller's configurator
 * MQTT and Home Assistant (Device page) - set the broker and the controller shows up in Home Assistant through MQTT discovery as a light: on/off, brightness, and the modes of the current layout (custom modes included) as effects, plus WiFi signal and IP diagnostics. Other MQTT clients can use the same topics, see below
 * Firmware update over WiFi - new `firmware.bin` file can be uploaded at `/update` after the IP address
 

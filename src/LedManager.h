@@ -46,7 +46,6 @@ private:
   CBaseMode *chargingMode;
 
   unsigned long tsCycleMs;
-  uint8_t cycleIndex;
   bool isCharging;
   bool wasCharging;
 

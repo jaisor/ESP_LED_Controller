@@ -128,12 +128,17 @@ const char htmlMain[] PROGMEM = R"=====(
             LEDs on
           </label>
           <br/>
-          <label>
-            LED Mode
-            <select name='ledMode' id='ledMode'>
+          <fieldset>
+            <legend>Modes</legend>
+            <div id='modeList' style='columns:14rem'>
               %s
-            </select>
-          </label>
+            </div>
+            <sub><small>
+              Select one mode to keep showing it, or several to cycle between them -
+              <a href='#' onclick='return setModes(true)'>select all</a>,
+              <a href='#' onclick='return setModes(false)'>clear</a>
+            </small></sub>
+          </fieldset>
           <br/>
           <label>
             Brightness <output id='ledBrightnessLabelId'>%.0f</output>%%
@@ -146,24 +151,10 @@ const char htmlMain[] PROGMEM = R"=====(
           </label>
           <br/>
           <label>
-            Mode duration in seconds
+            Change mode every (seconds)
             <input type='text' id='ledCycleModeMs' name='ledCycleModeMs' value='%lu'><br/>
-            <sub><small><i>0</i> disables mode changing </small></sub>
+            <sub><small>When several modes are selected; <i>0</i> stays on the mode that is showing</small></sub>
           </label>
-          </br>
-          <details>
-            <summary>Mode Cycling Selection</summary>
-            <label>
-              <input type='checkbox' id='cycleAllModes' name='cycleAllModes' %s onchange='document.getElementById("cycleModesList").disabled = this.checked'>
-              Cycle through all modes
-            </label>
-            <br/>
-            <label>
-              Custom mode cycle (comma-separated indices, e.g., 0,2,5)
-              <input type='text' id='cycleModesList' name='cycleModesList' value='%s' %s>
-              <sub><small>Available modes: %s</small></sub>
-            </label>
-          </details>
           <br/>
           <label>
             Brightness in power-save mode <output id='psLedBrightnessLabelId'>%.0f</output>%%
@@ -183,6 +174,23 @@ const char htmlMain[] PROGMEM = R"=====(
         </fieldset>
         <button type='submit' value='Submit'>Submit...</button>
       </form>
+      <script>
+        (function () {
+          var boxes = document.querySelectorAll('#modeList input');
+          // At least one mode has to stay selected; the browser blocks the submit and says why
+          function check() {
+            var any = Array.prototype.some.call(boxes, function (b) { return b.checked; });
+            if (boxes.length) boxes[0].setCustomValidity(any ? '' : 'Select at least one mode');
+          }
+          window.setModes = function (on) {
+            boxes.forEach(function (b) { b.checked = on; });
+            check();
+            return false;
+          };
+          boxes.forEach(function (b) { b.addEventListener('change', check); });
+          check();
+        })();
+      </script>
 )=====";
 
 const char htmlDevice[] PROGMEM = R"=====(

@@ -431,10 +431,6 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
 
     // LED Settings (strip hardware is set at /led)
     configuration.ledPower = request->hasArg("ledPower");
-    uint8_t ledMode = atoi(request->arg("ledMode").c_str());
-    if (isModeSelectable(ledMode, ledLayout)) {
-      configuration.ledMode = ledMode;
-    }
 
     float ledBrightness = atof(request->arg("ledBrightness").c_str())/100.0;
     if (ledBrightness>=0.0 && ledBrightness<=1.0) {
@@ -468,44 +464,37 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
       Log.noticeln("psEndHour: %i", psEndHour);
     }
 
-    // Mode cycling configuration
-    bool cycleAllModes = request->hasArg("cycleAllModes");
-    if (cycleAllModes) {
-      configuration.cycleModesCount = 0;
-      Log.noticeln("Cycle all modes enabled");
-    } else if (request->hasArg("cycleModesList")) {
-      String modesList = request->arg("cycleModesList");
-      modesList.trim();
-      if (modesList.length() > 0 && modes != NULL) {
-        uint8_t count = 0;
-        int startPos = 0;
-        int commaPos = modesList.indexOf(',');
-        
-        while (startPos < modesList.length() && count < 32) {
-          String modeStr;
-          if (commaPos == -1) {
-            modeStr = modesList.substring(startPos);
-          } else {
-            modeStr = modesList.substring(startPos, commaPos);
-          }
-          modeStr.trim();
-          
-          if (modeStr.length() > 0) {
-            uint8_t modeIndex = atoi(modeStr.c_str());
-            if (isModeSelectable(modeIndex, ledLayout)) {
-              configuration.cycleModesList[count++] = modeIndex;
-              Log.verboseln("Added mode %d to cycle list", modeIndex);
-            }
-          }
-          
-          if (commaPos == -1) break;
-          startPos = commaPos + 1;
-          commaPos = modesList.indexOf(',', startPos);
-        }
-        
-        configuration.cycleModesCount = count;
-        Log.noticeln("Custom cycle with %d modes", count);
+    // Checked modes become the cycle selection, in mode order
+    uint8_t selection[sizeof(configuration.cycleModesList)];
+    uint8_t count = 0;
+    auto chosen = [&](uint8_t mode) {
+      for (uint8_t i = 0; i < count; i++) if (selection[i] == mode) return true;
+      return false;
+    };
+    for (size_t i = 0; i < request->params(); i++) {
+      const AsyncWebParameter *param = request->getParam(i);
+      if (param->name() != "modes") continue;
+      long mode = param->value().toInt();
+      if (mode >= 0 && mode < 256 && isModeSelectable(mode, ledLayout) && !chosen(mode) && count < sizeof(selection)) {
+        selection[count++] = mode;
       }
+    }
+    if (count > 0) {  // The page requires one; a request without any leaves the selection alone
+      const uint8_t checked = count;
+      // Keep selected modes that don't fit this layout (they aren't on the page), for when it changes back
+      for (uint8_t i = 0; i < configuration.cycleModesCount && count < sizeof(selection); i++) {
+        uint8_t mode = configuration.cycleModesList[i];
+        if (modes != NULL && mode < modes->size() && !isModeSelectable(mode, ledLayout) && !chosen(mode)) {
+          selection[count++] = mode;
+        }
+      }
+      memcpy(configuration.cycleModesList, selection, count);
+      configuration.cycleModesCount = count;
+      if (!chosen(configuration.ledMode)) {
+        configuration.ledMode = selection[0];  // The showing mode was unchecked
+        updateModeChangeTime();
+      }
+      Log.noticeln("Mode selection: %d checked, showing %d", checked, configuration.ledMode);
     }
 
     //
@@ -1197,24 +1186,45 @@ void CWifiManager::printHTMLBottom(Print *p) {
   p->printf_P(htmlBottom, VERSION, jsonStr.c_str());
 }
 
+static bool inCycleList(uint8_t mode) {
+  for (uint8_t i = 0; i < configuration.cycleModesCount; i++) {
+    if (configuration.cycleModesList[i] == mode) return true;
+  }
+  return false;
+}
+
 void CWifiManager::printHTMLMain(Print *p) {
 
-  // Only modes that fit the running layout are offered
+  // One checkbox per mode that fits the running layout. Checked: the cycle selection, plus the mode that
+  // is showing so that saving the form never switches away from it. An empty selection is the older
+  // "every mode" setting when a duration is set, and just the showing mode otherwise.
+  const bool everyMode = configuration.cycleModesCount == 0 && configuration.ledCycleModeMs > 0;
   String modeOptions = "";
   String currentModeName = "Unknown";
+  uint8_t selected = 0;
+  bool currentSelected = false;
   if (modes != NULL) {
     for(uint8_t i=0; i<modes->size(); i++) {
       if (!isModeSelectable(i, ledLayout)) continue;
-      modeOptions += String("<option") + String(i == configuration.ledMode ? " selected" : "") + String(" value='") + String(i) + String("'>") + (*modes)[i]->getName() + String("</option>");
+      const bool inSelection = everyMode || inCycleList(i);
+      const bool showing = i == configuration.ledMode;
+      if (inSelection) {
+        selected++;
+        currentSelected |= showing;
+      }
+      modeOptions += String("<label style='break-inside:avoid'><input type='checkbox' name='modes' value='") + i + "'"
+        + (inSelection || showing ? " checked" : "") + "> " + (*modes)[i]->getName()
+        + (showing ? " <small>(showing)</small>" : "") + "</label>";
     }
     if (configuration.ledMode < modes->size()) {
       currentModeName = (*modes)[configuration.ledMode]->getName();
     }
   }
 
-  // Calculate remaining time
+  // Calculate remaining time - only while there is another selected mode to change to
+  const bool cycling = configuration.ledCycleModeMs > 0 && (selected > 1 || (selected == 1 && !currentSelected));
   String timeRemaining;
-  if (configuration.ledCycleModeMs > 0) {
+  if (cycling) {
     unsigned long elapsed = millis() - lastModeChangeMs;
     if (elapsed < configuration.ledCycleModeMs) {
       unsigned long remaining = (configuration.ledCycleModeMs - elapsed) / 1000;
@@ -1224,25 +1234,6 @@ void CWifiManager::printHTMLMain(Print *p) {
     }
   } else {
     timeRemaining = "indefinite";
-  }
-
-  // Build cycle modes list string
-  String cycleModesListStr = "";
-  if (configuration.cycleModesCount > 0) {
-    for (uint8_t i = 0; i < configuration.cycleModesCount; i++) {
-      if (i > 0) cycleModesListStr += ",";
-      cycleModesListStr += String(configuration.cycleModesList[i]);
-    }
-  }
-
-  // Build available modes list string
-  String availableModesStr = "";
-  if (modes != NULL) {
-    for(uint8_t i=0; i<modes->size(); i++) {
-      if (!isModeSelectable(i, ledLayout)) continue;
-      if (availableModesStr.length() > 0) availableModesStr += ", ";
-      availableModesStr += String(i) + "=" + (*modes)[i]->getName();
-    }
   }
 
   // Get current local time if WiFi connected
@@ -1266,10 +1257,6 @@ void CWifiManager::printHTMLMain(Print *p) {
     configuration.ledBrightness * 100, configuration.ledBrightness * 100, 
     configuration.ledDelayMs, 
     configuration.ledCycleModeMs / 1000,
-    configuration.cycleModesCount == 0 ? "checked" : "",
-    cycleModesListStr.c_str(),
-    configuration.cycleModesCount == 0 ? "disabled" : "",
-    availableModesStr.c_str(),
     configuration.psLedBrightness * 100.0, configuration.psLedBrightness * 100.0, 
     configuration.psStartHour, 
     configuration.psEndHour
