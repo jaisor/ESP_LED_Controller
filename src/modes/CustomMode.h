@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include "BaseMode.h"
 
 struct custom_effect_t {
@@ -11,6 +12,7 @@ struct custom_effect_t {
     const char *repeatHelp;
     const char *help;
     bool ringSelect;          // On a ring layout, can run on both rings or just one (CUSTOM_MODE_RING_*)
+    bool usesModes;           // Plays other modes (configuration.customModeSources) instead of its own colors
 };
 
 // Indexed by CUSTOM_EFFECT_*, entry 0 (CUSTOM_EFFECT_NONE) is a placeholder
@@ -19,6 +21,10 @@ extern const custom_effect_t CUSTOM_EFFECTS[CUSTOM_EFFECT_COUNT];
 int CUSTOM_effectFromId(const char *id);  // -1 if unknown or CUSTOM_EFFECT_NONE
 uint8_t CUSTOM_effectDirectionCount(uint8_t effect);  // Options in its directions list, 1 if it has none
 bool CUSTOM_effectSupportsLayout(uint8_t effect, uint8_t layout);
+
+// Whether a mode can be played on one ring of a two-modes effect: a regular mode that works on a single
+// strip. That leaves out ring-only modes and other two-modes effects, so a combination can't contain itself.
+inline bool CUSTOM_isComboSource(CBaseMode *mode) { return mode && mode->supportsLayout(LED_LAYOUT_SINGLE); }
 
 // Draws configuration.customModes[slot], read every frame so edits show without a reboot
 class CCustomMode : public CBaseMode {
@@ -48,6 +54,8 @@ private:
     bool flashOn = false;
     uint16_t flashStart = 0, flashLength = 0;
     CRGB flashColor;
+    const std::vector<CBaseMode*> *sourceModes = nullptr;  // All registered modes, for the two-modes effect
+    CRGB *sourceBuffers[2] = {nullptr, nullptr};           // Two modes: full-length frames, kept between draws
 
     CRGB colorAt(const custom_mode_t &m, uint8_t position);
     CRGB gradientAt(const custom_mode_t &m, uint8_t position, bool fromBlack);
@@ -63,6 +71,9 @@ private:
     void drawScanner(CRGB *leds, const custom_mode_t &m, bool tick);
     void drawWipe(CRGB *leds, const custom_mode_t &m, bool tick);
     void drawLightning(CRGB *leds, const custom_mode_t &m);
+    void drawCombo(CRGB *leds);
+    CBaseMode *comboSource(uint8_t ring);
+    void freeSourceBuffers();
 
 public:
     CCustomMode(const uint16_t numLeds, const uint16_t numLedsOutter, const uint8_t slot, const bool ringLayout);
@@ -71,4 +82,5 @@ public:
     virtual const String getName();
     virtual bool supportsLayout(uint8_t layout) const;
     virtual int8_t getCustomSlot() const { return slot; }
+    void setSourceModes(const std::vector<CBaseMode*> *modes) { sourceModes = modes; }
 };

@@ -96,6 +96,7 @@
     // Hardware defaults, used on factory reset and when a configuration saved by older
     // firmware (which had these compiled in) is loaded. All of them are editable at /led.
     #define LED_CHANGE_MODE_SEC   0
+    #define MODE_SYNC_MIN_LEAD_S  20  // Synchronized mode changes: the next one is never closer than this
     // LED_PIN_LIST is every GPIO offered as a data pin; on ESP8266 each one is a FastLED template instance
     #if defined(CONFIG_IDF_TARGET_ESP32C3)
       #define LED_PIN GPIO_NUM_2
@@ -173,7 +174,8 @@
   #define CUSTOM_EFFECT_SCANNER   12    // Larson scanner: an eye sweeping back and forth with a tail
   #define CUSTOM_EFFECT_WIPE      13    // Each color in turn fills the LEDs
   #define CUSTOM_EFFECT_LIGHTNING 14    // Random bursts of flashes on parts of the LEDs
-  #define CUSTOM_EFFECT_COUNT     15
+  #define CUSTOM_EFFECT_COMBO     15    // Ring: one regular mode on the outer ring, another on the inner
+  #define CUSTOM_EFFECT_COUNT     16
 
   struct custom_mode_t {
     char name[CUSTOM_MODE_NAME_SIZE];
@@ -249,6 +251,16 @@ struct configuration_t {
         uint8_t mqttDiscovery;      // Publish Home Assistant discovery
     #endif
     char _mqttLoaded[4];            // "mq1" once the block above is initialized
+
+    #ifdef LED
+        uint8_t customModeSources[CUSTOM_MODE_COUNT][2];  // CUSTOM_EFFECT_COMBO: mode index for the outer, inner ring
+    #endif
+    char _comboLoaded[4];           // "cs1" once the block above is initialized
+
+    #ifdef LED
+        uint8_t ledCycleSync;       // Mode changes on clock minutes, see nextSyncedChange(); needs NTP time
+    #endif
+    char _syncLoaded[4];            // "sy1" once the block above is initialized
 };
 
 extern configuration_t configuration;
@@ -277,6 +289,7 @@ void intLEDBlink(uint16_t ms);
 
 #ifdef LED
     float CONFIG_getLedBrightness(bool force = false);
+    bool CONFIG_isTimeSynced();  // The clock holds real time, i.e. NTP has answered since boot
 
     struct led_option_t {
       uint8_t value;

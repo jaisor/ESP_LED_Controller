@@ -339,7 +339,9 @@ void CLEDManager::registerModes() {
   // empty slots and effects that don't fit the layout report themselves unavailable.
   // New built-in modes go after these.
   for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
-    modes.push_back(new CCustomMode(n, outer, slot, layout == LED_LAYOUT_RING));
+    CCustomMode *mode = new CCustomMode(n, outer, slot, layout == LED_LAYOUT_RING);
+    mode->setSourceModes(&modes);  // The two-modes effect plays other registered modes
+    modes.push_back(mode);
   }
 }
 
@@ -400,8 +402,20 @@ void CLEDManager::updateModeCycling() {
     return;
   }
 
-  if (millis() - tsCycleMs <= configuration.ledCycleModeMs) {
-    return;
+  // Synchronized: on the clock's minute grid. Without the time (no NTP answer since boot) the plain
+  // timer carries on, counting from when synchronizing stopped.
+  if (configuration.ledCycleSync && CONFIG_isTimeSynced()) {
+    if (!syncSchedule.due(time(nullptr), configuration.ledCycleModeMs, configuration.ledMode, MODE_SYNC_MIN_LEAD_S)) {
+      return;
+    }
+  } else {
+    if (syncSchedule.active) {
+      syncSchedule.stop();
+      tsCycleMs = millis();
+    }
+    if (millis() - tsCycleMs <= configuration.ledCycleModeMs) {
+      return;
+    }
   }
 
   tsCycleMs = millis();
@@ -412,9 +426,22 @@ void CLEDManager::updateModeCycling() {
     return;  // A single selected mode: nothing to switch to
   }
   configuration.ledMode = next;
+  syncSchedule.changedTo(next);
 
   if (onModeChange) {
     onModeChange();
   }
   Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
+}
+
+long CLEDManager::secondsToNextChange() {
+  if (configuration.ledCycleModeMs == 0) {
+    return -1;
+  }
+  if (syncSchedule.active && configuration.ledCycleSync && CONFIG_isTimeSynced()) {
+    long remaining = (long)(syncSchedule.next - time(nullptr));
+    return remaining > 0 ? remaining : 0;
+  }
+  unsigned long elapsed = millis() - tsCycleMs;
+  return elapsed < configuration.ledCycleModeMs ? (configuration.ledCycleModeMs - elapsed) / 1000 : 0;
 }

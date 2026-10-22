@@ -431,6 +431,10 @@ void CWifiManager::handleRoot(AsyncWebServerRequest *request) {
 
     // LED Settings (strip hardware is set at /led)
     configuration.ledPower = request->hasArg("ledPower");
+    // The checkbox is disabled (so not posted) while synchronizing isn't possible; keep the setting then
+    if (isModeSyncAllowed()) {
+      configuration.ledCycleSync = request->hasArg("ledCycleSync");
+    }
 
     float ledBrightness = atof(request->arg("ledBrightness").c_str())/100.0;
     if (ledBrightness>=0.0 && ledBrightness<=1.0) {
@@ -799,6 +803,12 @@ bool CWifiManager::isModeSelectable(uint8_t index, uint8_t layout, const configu
   return (*modes)[index]->supportsLayout(layout);
 }
 
+// A mode a two-modes effect can play on one ring: one that works on a single strip (which leaves out ring
+// modes and other two-modes effects), and not the two-modes mode itself (`self`, its mode index or -1)
+bool CWifiManager::isComboSource(int index, const configuration_t &c, int self) {
+  return index >= 0 && index != self && isModeSelectable(index, LED_LAYOUT_SINGLE, c);
+}
+
 int CWifiManager::customModeIndex(uint8_t slot) {
   for (size_t i = 0; modes != NULL && i < modes->size(); i++) {
     if ((*modes)[i]->getCustomSlot() == slot) {
@@ -832,11 +842,18 @@ static void customModeToJson(const custom_mode_t &m, uint8_t slot, JsonObject o)
   o["direction"] = m.direction;
   o["speed"] = m.speed;
   o["repeat"] = m.repeat;
+  if (CUSTOM_EFFECTS[m.effect].usesModes) {
+    o["outerMode"] = configuration.customModeSources[slot][0];
+    o["innerMode"] = configuration.customModeSources[slot][1];
+  }
 }
 
-// nullptr if o describes a valid custom mode, else the reason it doesn't
-static const char* customModeFromJson(JsonObjectConst o, custom_mode_t &m) {
+// nullptr if o describes a valid custom mode, else the reason it doesn't. sources gets the outer and
+// inner ring mode of a two-modes effect; whether those name regular modes is checked by the caller,
+// which knows the registered modes.
+static const char* customModeFromJson(JsonObjectConst o, custom_mode_t &m, uint8_t sources[2]) {
   memset(&m, 0, sizeof(m));
+  sources[0] = sources[1] = 0;
 
   const char *name = o["name"];
   if (!name || !strlen(name)) return "name is required";
@@ -849,8 +866,18 @@ static const char* customModeFromJson(JsonObjectConst o, custom_mode_t &m) {
   if (effect < 0) return "unknown effect";
   m.effect = effect;
 
+  if (CUSTOM_EFFECTS[effect].usesModes) {
+    int outer = o["outerMode"] | -1, inner = o["innerMode"] | -1;
+    if (outer < 0 || outer > 255 || inner < 0 || inner > 255) return "a mode for each ring is required";
+    sources[0] = outer;
+    sources[1] = inner;
+  }
+
   JsonArrayConst colors = o["colors"];
-  if (colors.isNull() || colors.size() == 0 || colors.size() > CUSTOM_MODE_MAX_COLORS) return "between 1 and 8 colors required";
+  if (colors.isNull() && CUSTOM_EFFECTS[effect].usesModes) {
+    m.colorCount = 1;  // Not used by the effect, but keeps the slot valid if its effect is changed later
+    memset(m.colors[0], 0xFF, 3);
+  } else if (colors.isNull() || colors.size() == 0 || colors.size() > CUSTOM_MODE_MAX_COLORS) return "between 1 and 8 colors required";
   for (JsonVariantConst v : colors) {
     const char *hex = v;
     char *end = nullptr;
@@ -905,7 +932,18 @@ String CWifiManager::customModesPageJson(int savedSlot) {
     e["repeatLabel"] = CUSTOM_EFFECTS[i].repeatLabel;
     e["repeatHelp"] = CUSTOM_EFFECTS[i].repeatHelp;
     e["ringSelect"] = CUSTOM_EFFECTS[i].ringSelect;
+    e["usesModes"] = CUSTOM_EFFECTS[i].usesModes;
     e["available"] = CUSTOM_effectSupportsLayout(i, ledLayout);
+  }
+
+  // Modes a two-modes effect can play on a ring
+  JsonArray sources = doc["sources"].to<JsonArray>();
+  for (uint8_t i = 0; modes != NULL && i < modes->size(); i++) {
+    if (isComboSource(i, configuration, -1)) {
+      JsonObject source = sources.add<JsonObject>();
+      source["index"] = i;
+      source["name"] = (*modes)[i]->getName();
+    }
   }
 
   JsonArray saved = doc["modes"].to<JsonArray>();
@@ -952,7 +990,8 @@ void CWifiManager::handleCustomModeUpdate(AsyncWebServerRequest *request, JsonOb
     }
   } else {
     custom_mode_t mode;
-    error = customModeFromJson(body, mode);
+    uint8_t sources[2];
+    error = customModeFromJson(body, mode, sources);
     if (!error && slot < 0) {
       slot = freeCustomModeSlot(configuration);
       if (slot < 0) error = "all custom mode slots are in use, delete one first";
@@ -960,8 +999,14 @@ void CWifiManager::handleCustomModeUpdate(AsyncWebServerRequest *request, JsonOb
     if (!error && slot >= CUSTOM_MODE_COUNT) {
       error = "unknown slot";
     }
+    if (!error && CUSTOM_EFFECTS[mode.effect].usesModes) {
+      const int self = customModeIndex(slot);
+      if (!isComboSource(sources[0], configuration, self)) error = "the outer ring mode isn't a regular mode on this controller";
+      else if (!isComboSource(sources[1], configuration, self)) error = "the inner ring mode isn't a regular mode on this controller";
+    }
     if (!error) {
       configuration.customModes[slot] = mode;
+      memcpy(configuration.customModeSources[slot], sources, sizeof(sources));
       Log.noticeln("Saved custom mode %d '%s'", slot, mode.name);
       int index = customModeIndex(slot);
       if ((body["activate"] | false) && index >= 0 && isModeSelectable(index, ledLayout)) {
@@ -1111,6 +1156,7 @@ void CWifiManager::handleRestAPI_Config(AsyncWebServerRequest *request) {
   configJson["ledMirror"] = (bool)configuration.ledMirror;
   configJson["ledDelayMs"] = configuration.ledDelayMs;
   configJson["ledCycleModeMs"] = configuration.ledCycleModeMs;
+  configJson["ledCycleSync"] = (bool)configuration.ledCycleSync;
   configJson["ledStripSize"] = configuration.ledStripSize;
   configJson["psLedBrightness"] = configuration.psLedBrightness;
   configJson["psStartHour"] = configuration.psStartHour;
@@ -1154,6 +1200,23 @@ void CWifiManager::handleStyleCSS(AsyncWebServerRequest *request) {
     return len;
   });
   request->send(response);
+}
+
+// Synchronized mode changes need a trustworthy clock: joined to a WiFi network (not our own access point),
+// an NTP server to ask, and an answer from it since boot
+bool CWifiManager::isModeSyncAllowed(String *reason) {
+  const char *why = nullptr;
+  if (isApMode() || WiFi.status() != WL_CONNECTED) {
+    why = "not connected to a WiFi network";
+  } else if (!strlen(configuration.ntpServer)) {
+    why = "no NTP server is set";
+  } else if (!CONFIG_isTimeSynced()) {
+    why = "no time received from the NTP server yet";
+  }
+  if (why && reason) {
+    *reason = why;
+  }
+  return !why;
 }
 
 bool CWifiManager::isApMode() { 
@@ -1225,16 +1288,26 @@ void CWifiManager::printHTMLMain(Print *p) {
   const bool cycling = configuration.ledCycleModeMs > 0 && (selected > 1 || (selected == 1 && !currentSelected));
   String timeRemaining;
   if (cycling) {
-    unsigned long elapsed = millis() - lastModeChangeMs;
-    if (elapsed < configuration.ledCycleModeMs) {
-      unsigned long remaining = (configuration.ledCycleModeMs - elapsed) / 1000;
-      timeRemaining = String(remaining) + String(" seconds");
+    long remaining;
+    if (nextModeChange) {
+      remaining = nextModeChange();
     } else {
-      timeRemaining = "changing now...";
+      unsigned long elapsed = millis() - lastModeChangeMs;
+      remaining = elapsed < configuration.ledCycleModeMs ? (configuration.ledCycleModeMs - elapsed) / 1000 : 0;
+    }
+    timeRemaining = remaining > 0 ? String(remaining) + String(" seconds") : String("changing now...");
+    if (configuration.ledCycleSync && CONFIG_isTimeSynced()) {
+      timeRemaining += " (synchronized)";
     }
   } else {
     timeRemaining = "indefinite";
   }
+
+  String syncReason;
+  const bool syncAllowed = isModeSyncAllowed(&syncReason);
+  const String syncNote = syncAllowed
+    ? String("Changes land on the clock's minutes (the duration is rounded up to whole minutes), so controllers with the same duration change together")
+    : String("Needs WiFi and the time from the NTP server: ") + syncReason;
 
   // Get current local time if WiFi connected
   String currentTimeStr = "";
@@ -1259,7 +1332,10 @@ void CWifiManager::printHTMLMain(Print *p) {
     configuration.ledCycleModeMs / 1000,
     configuration.psLedBrightness * 100.0, configuration.psLedBrightness * 100.0, 
     configuration.psStartHour, 
-    configuration.psEndHour
+    configuration.psEndHour,
+    configuration.ledCycleSync ? "checked" : "",
+    syncAllowed ? "" : "disabled",
+    syncNote.c_str()
   );
 
 }
@@ -1399,7 +1475,8 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
     uint8_t n = 0;
     for (JsonVariantConst v : jsonObj["customModes"].as<JsonArrayConst>()) {
       custom_mode_t mode;
-      const char *modeError = customModeFromJson(v.as<JsonObjectConst>(), mode);
+      uint8_t sources[2];
+      const char *modeError = customModeFromJson(v.as<JsonObjectConst>(), mode, sources);
       if (modeError) {
         if (error) *error = String("custom mode ") + (n + 1) + ": " + modeError;
         return false;
@@ -1413,7 +1490,17 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
         return false;
       }
       c.customModes[slot] = mode;
+      memcpy(c.customModeSources[slot], sources, sizeof(sources));
       n++;
+    }
+    // Two-modes effects can name custom modes from anywhere in the list, so check them once all are in
+    for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
+      if (!CUSTOM_EFFECTS[c.customModes[slot].effect].usesModes) continue;
+      const int self = customModeIndex(slot);
+      if (!isComboSource(c.customModeSources[slot][0], c, self) || !isComboSource(c.customModeSources[slot][1], c, self)) {
+        if (error) *error = String("custom mode '") + c.customModes[slot].name + "': a ring's mode isn't a regular mode on this controller";
+        return false;
+      }
     }
     mqttDiscoveryNeeded = true;  // Effect list
   }
@@ -1446,6 +1533,11 @@ bool CWifiManager::updateConfigFromJson(JsonDocument jsonObj, bool allowHardware
   if (!jsonObj["ledDelayMs"].isNull()) {
     c.ledDelayMs = jsonObj["ledDelayMs"].as<unsigned long>();
     Log.traceln("Setting 'ledDelayMs' to %l", c.ledDelayMs);
+  }
+
+  if (!jsonObj["ledCycleSync"].isNull()) {
+    // Stored even when the time isn't available yet; cycling only synchronizes once it is
+    c.ledCycleSync = jsonObj["ledCycleSync"].as<bool>();
   }
 
   if (!jsonObj["ledCycleModeMs"].isNull()) {

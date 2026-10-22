@@ -172,7 +172,14 @@ const char htmlMain[] PROGMEM = R"=====(
           </label>
           </br>
         </fieldset>
-        <button type='submit' value='Submit'>Submit...</button>
+        <div style='display:flex;flex-wrap:wrap;gap:0 1.5rem;align-items:center'>
+          <button type='submit' value='Submit' style='width:auto'>Submit...</button>
+          <label style='margin:0'>
+            <input type='checkbox' role='switch' id='ledCycleSync' name='ledCycleSync' %s %s>
+            Synchronize mode changes to the clock
+          </label>
+        </div>
+        <sub><small>%s</small></sub>
       </form>
       <script>
         (function () {
@@ -481,7 +488,18 @@ const char htmlModes[] PROGMEM = R"=====(
               </select>
             </label>
           </fieldset>
-          <fieldset>
+          <fieldset id='sourcesField'>
+            <legend><strong>Modes</strong></legend>
+            <label>
+              Outer ring
+              <select id='outerMode'></select>
+            </label>
+            <label>
+              Inner ring
+              <select id='innerMode'></select>
+            </label>
+          </fieldset>
+          <fieldset id='colorsField'>
             <legend><strong>Colors</strong></legend>
             <div id='colors' style='display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.5rem'></div>
             <button type='button' class='secondary outline' id='addColor'>+ Add color</button>
@@ -497,7 +515,7 @@ const char htmlModes[] PROGMEM = R"=====(
               <input type='range' id='repeat' min='1' max='10'>
               <sub><small id='repeatHelp'></small></sub>
             </label>
-            <label>
+            <label id='speedField'>
               Speed <output id='speedOut'></output>
               <input type='range' id='speed' min='1' max='10'>
               <sub><small>Also scaled by the frame delay on the main page</small></sub>
@@ -518,6 +536,21 @@ const char htmlModes[] PROGMEM = R"=====(
 
           function effectById(id) {
             return data.effects.find(function (e) { return e.id === id; });
+          }
+
+          function sourceName(index) {
+            var source = data.sources.find(function (x) { return x.index === index; });
+            return source ? source.name : '(missing)';
+          }
+
+          // Modes a two-modes effect can play, minus the mode being edited
+          function fillSources(select, value) {
+            var self = editing >= 0 ? (data.modes.find(function (x) { return x.slot === editing; }) || {}).index : -1;
+            select.innerHTML = '';
+            data.sources.forEach(function (x) {
+              if (x.index !== self) select.add(new Option(x.name, x.index));
+            });
+            if (value !== undefined && select.querySelector("option[value='" + value + "']")) select.value = value;
           }
 
           function swatch(color) {
@@ -564,7 +597,11 @@ const char htmlModes[] PROGMEM = R"=====(
                 effect.appendChild(na);
               }
               var colors = row.insertCell();
-              m.colors.forEach(function (c) { colors.appendChild(swatch(c)); });
+              if (effectById(m.effect).usesModes) {
+                colors.textContent = 'Outer: ' + sourceName(m.outerMode) + ' / Inner: ' + sourceName(m.innerMode);
+              } else {
+                m.colors.forEach(function (c) { colors.appendChild(swatch(c)); });
+              }
               var actions = row.insertCell();
               actions.appendChild(button('Edit', 'secondary', function () { edit(m); }));
               actions.appendChild(button('Code', 'secondary outline', function () { showCode(m); }));
@@ -583,10 +620,15 @@ const char htmlModes[] PROGMEM = R"=====(
 
           // A mode code is what another controller needs to recreate the mode; slot and index are local
           function modeCode(m) {
-            return JSON.stringify({
+            var code = {
               name: m.name, effect: m.effect, colors: m.colors, smooth: m.smooth,
               direction: m.direction, rings: m.rings || 'both', speed: m.speed, repeat: m.repeat
-            });
+            };
+            if (effectById(m.effect).usesModes) {
+              code.outerMode = m.outerMode;
+              code.innerMode = m.innerMode;
+            }
+            return JSON.stringify(code);
           }
 
           function showCode(m) {
@@ -623,6 +665,14 @@ const char htmlModes[] PROGMEM = R"=====(
             if (typeof m.name !== 'string' || !m.name.trim()) throw new Error('the code has no name');
             var e = effectById(m.effect);
             if (!e) throw new Error('effect "' + m.effect + '" is not supported by this controller');
+            if (e.usesModes) {
+              [['outerMode', 'outer'], ['innerMode', 'inner']].forEach(function (ring) {
+                if (!data.sources.some(function (x) { return x.index === m[ring[0]]; })) {
+                  throw new Error('the ' + ring[1] + ' ring mode (#' + m[ring[0]] + ') is not a regular mode on this controller');
+                }
+              });
+              if (!Array.isArray(m.colors) || !m.colors.length) m.colors = ['#ffffff'];
+            }
             if (!Array.isArray(m.colors) || !m.colors.length || m.colors.length > data.maxColors
                 || !m.colors.every(function (c) { return /^#[0-9a-f]{6}$/i.test(c); })) {
               throw new Error('colors must be 1 to ' + data.maxColors + ' #rrggbb values');
@@ -639,7 +689,9 @@ const char htmlModes[] PROGMEM = R"=====(
               rings: ['both', 'outer', 'inner'].indexOf(m.rings) >= 0 ? m.rings : 'both',
               direction: direction >= 0 && direction < directions ? direction : 0,
               speed: clamp(m.speed, 1, 10, 3),
-              repeat: clamp(m.repeat, 1, 10, 1)
+              repeat: clamp(m.repeat, 1, 10, 1),
+              outerMode: m.outerMode,
+              innerMode: m.innerMode
             };
           }
 
@@ -706,6 +758,9 @@ const char htmlModes[] PROGMEM = R"=====(
             }
             if (previous !== '' && previous < direction.options.length) direction.value = previous;
             $('directionField').hidden = !e.directions;
+            $('sourcesField').hidden = !e.usesModes;
+            $('colorsField').hidden = !!e.usesModes;
+            $('speedField').hidden = !!e.usesModes;
             // Hidden elsewhere, but the value is kept and saved so the mode is unchanged back on a ring
             $('ringsField').hidden = !(e.ringSelect && data.layoutId === 'ring');
             // The repeat slider means something different per effect (palette repeats, stars, flame height...)
@@ -733,6 +788,8 @@ const char htmlModes[] PROGMEM = R"=====(
             $('rings').value = (m && m.rings) || 'both';
             $('speed').value = m ? m.speed : 3;
             $('repeat').value = m ? m.repeat : 1;
+            fillSources($('outerMode'), m ? m.outerMode : undefined);
+            fillSources($('innerMode'), m ? m.innerMode : undefined);
             updateOutputs();
             if (m) $('modeForm').scrollIntoView({ behavior: 'smooth' });
           }
@@ -777,6 +834,10 @@ const char htmlModes[] PROGMEM = R"=====(
               activate: true
             };
             if (editing >= 0) body.slot = editing;
+            if (effectById(body.effect).usesModes) {
+              body.outerMode = parseInt($('outerMode').value, 10);
+              body.innerMode = parseInt($('innerMode').value, 10);
+            }
             send(body, $('saveButton')).then(function (d) {
               // Keep editing what was just saved, so further tweaks update it instead of adding copies
               var saved = d.modes.find(function (m) { return m.slot === d.savedSlot; });

@@ -46,6 +46,9 @@ const custom_effect_t CUSTOM_EFFECTS[CUSTOM_EFFECT_COUNT] = {
     "Flashes per strike", "Each strike is a burst of up to this many flashes",
     "Bursts of flashes on random stretches of the LEDs, in the palette colors, with dark pauses in between. "
     "Speed sets how often it strikes." },
+  { "combo", "Two modes", LAYOUTS_RING, nullptr, nullptr, nullptr,
+    "Plays one regular mode on the outer ring and another on the inner ring. Each mode's whole pattern is "
+    "fitted onto its ring.", false, true },
 };
 
 int CUSTOM_effectFromId(const char *id) {
@@ -85,6 +88,14 @@ CCustomMode::CCustomMode(const uint16_t numLeds, const uint16_t numLedsOutter, c
 
 CCustomMode::~CCustomMode() {
   delete[] heat;
+  freeSourceBuffers();
+}
+
+void CCustomMode::freeSourceBuffers() {
+  for (CRGB *&buffer : sourceBuffers) {
+    delete[] buffer;
+    buffer = nullptr;
+  }
 }
 
 void CCustomMode::resetState(uint8_t effect) {
@@ -95,6 +106,9 @@ void CCustomMode::resetState(uint8_t effect) {
     heat = nullptr;
   } else if (heat) {
     memset(heat, 0, numLeds);
+  }
+  if (effect != CUSTOM_EFFECT_COMBO) {
+    freeSourceBuffers();
   }
   accum = 0;
   steps = 0;
@@ -236,6 +250,7 @@ void CCustomMode::draw(CRGB *leds) {
     case CUSTOM_EFFECT_SCANNER: drawScanner(leds, m, tick); break;
     case CUSTOM_EFFECT_WIPE: drawWipe(leds, m, tick); break;
     case CUSTOM_EFFECT_LIGHTNING: drawLightning(leds, m); break;
+    case CUSTOM_EFFECT_COMBO: drawCombo(leds); break;
   }
 }
 
@@ -442,5 +457,54 @@ void CCustomMode::drawLightning(CRGB *leds, const custom_mode_t &m) {
   fill_solid(leds, numLeds, CRGB::Black);
   if (flashOn) {
     fill_solid(leds + flashStart, flashLength, flashColor);
+  }
+}
+
+// The mode chosen for ring 0 (outer) or 1 (inner), or nullptr when the stored index doesn't name a
+// regular mode - out of range, or a custom slot that has since been emptied or turned into a ring effect
+CBaseMode *CCustomMode::comboSource(uint8_t ring) {
+  if (!sourceModes) {
+    return nullptr;
+  }
+  uint8_t index = configuration.customModeSources[slot][ring];
+  if (index >= sourceModes->size()) {
+    return nullptr;
+  }
+  CBaseMode *mode = (*sourceModes)[index];
+  return mode != this && CUSTOM_isComboSource(mode) ? mode : nullptr;
+}
+
+// Each source mode is built for the whole chain, so it draws a full-length frame into its own buffer
+// (which keeps it between frames, like the real LEDs would for twinkle or the scanner's tail) and that
+// frame is scaled onto the ring. The same mode on both rings is drawn once and shared.
+void CCustomMode::drawCombo(CRGB *leds) {
+  if (!ringLayout) {
+    fill_solid(leds, numLeds, CRGB::Black);
+    return;
+  }
+  CBaseMode *sources[2] = { comboSource(0), comboSource(1) };
+  const uint16_t start[2] = { 0, numLedsOutter };
+  const uint16_t length[2] = { numLedsOutter, (uint16_t)(numLeds - numLedsOutter) };
+
+  for (uint8_t ring = 0; ring < 2; ring++) {
+    CRGB *frame = nullptr;
+    if (ring == 1 && sources[1] && sources[1] == sources[0]) {
+      frame = sourceBuffers[0];
+    } else if (sources[ring]) {
+      if (!sourceBuffers[ring]) {
+        sourceBuffers[ring] = new (std::nothrow) CRGB[numLeds];
+      }
+      frame = sourceBuffers[ring];
+      if (frame) {
+        sources[ring]->draw(frame);
+      }
+    }
+    if (!frame) {
+      fill_solid(leds + start[ring], length[ring], CRGB::Black);
+      continue;
+    }
+    for (uint16_t i = 0; i < length[ring]; i++) {
+      leds[start[ring] + i] = frame[(uint32_t)i * numLeds / length[ring]];
+    }
   }
 }

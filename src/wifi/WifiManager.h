@@ -70,6 +70,7 @@ private:
   void handleCustomModeUpdate(AsyncWebServerRequest *request, JsonObject body);
   String customModesPageJson(int savedSlot = -1);
   int customModeIndex(uint8_t slot);
+  bool isComboSource(int index, const configuration_t &c, int self);
   void handleFactoryReset(AsyncWebServerRequest *request);
   void handleReboot(AsyncWebServerRequest *request);
   void handleStyleCSS(AsyncWebServerRequest *request);
@@ -85,6 +86,8 @@ private:
   bool isApMode();
 
   bool isMqttConfigured();
+  bool isModeSyncAllowed(String *reason = nullptr);
+  std::function<long()> nextModeChange;  // Seconds to the next automatic mode change, -1 for none
   String mqttTopic(const char *suffix);
   void mqttLoop();
   void mqttConnect();
@@ -115,6 +118,7 @@ public:
 
   void setModes(std::vector<CBaseMode*> *modes, uint8_t layout) { this->modes = modes; this->ledLayout = layout; }
   void updateModeChangeTime() { lastModeChangeMs = millis(); }
+  void setNextModeChangeProvider(std::function<long()> provider) { nextModeChange = provider; }
 
   void setDevice(CDevice* device) { this->device = device; };
 };

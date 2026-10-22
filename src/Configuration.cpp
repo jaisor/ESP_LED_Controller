@@ -114,6 +114,8 @@ void EEPROM_loadConfig() {
       configuration._customModesLoaded[0] = '\0';
     #endif
     configuration._mqttLoaded[0] = '\0';
+    configuration._comboLoaded[0] = '\0';
+    configuration._syncLoaded[0] = '\0';
   }
 
 #ifdef LED
@@ -135,6 +137,25 @@ void EEPROM_loadConfig() {
     memset(configuration.customModes, 0, sizeof(configuration.customModes));
   }
 #endif
+
+  if (strcmp(configuration._comboLoaded, "cs1")) {
+    // Mode 0 on both rings; which indices are valid sources depends on the modes registered, so the
+    // two-modes effect checks them when it draws
+    strcpy(configuration._comboLoaded, "cs1");
+    #ifdef LED
+      memset(configuration.customModeSources, 0, sizeof(configuration.customModeSources));
+    #endif
+  }
+
+  if (strcmp(configuration._syncLoaded, "sy1")) {
+    strcpy(configuration._syncLoaded, "sy1");
+    #ifdef LED
+      configuration.ledCycleSync = false;
+    #endif
+  }
+  #ifdef LED
+    configuration.ledCycleSync = configuration.ledCycleSync ? 1 : 0;
+  #endif
 
   if (strcmp(configuration._mqttLoaded, "mq1")) {
     Log.infoln("No MQTT configuration, loading defaults");
@@ -396,6 +417,11 @@ bool isInsideInterval(int i, int8_t s, int8_t e) {
   } else {
     return ((i>=s && i<24) || (i>=0 && i<e));
   }
+}
+
+bool CONFIG_isTimeSynced() {
+  // Both cores start the clock at the epoch; anything after late 2023 came from an NTP answer
+  return time(nullptr) > 1700000000;
 }
 
 float CONFIG_getLedBrightness(bool force) {

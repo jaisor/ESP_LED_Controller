@@ -7,6 +7,7 @@
 
 #include "Configuration.h"
 #include "modes/BaseMode.h"
+#include "ModeCycle.h"
 
 class CLEDManager {
 
@@ -22,6 +23,8 @@ public:
   uint8_t getLayout() const { return layout; }
   void setModeChangeCallback(std::function<void()> callback) { onModeChange = callback; }
   void setChargingStartCallback(std::function<void()> callback) { onChargingStart = callback; }
+  // Seconds until the next automatic mode change, -1 when modes don't change on their own
+  long secondsToNextChange();
 
 private:
   void initFastLED();
@@ -46,6 +49,7 @@ private:
   CBaseMode *chargingMode;
 
   unsigned long tsCycleMs;
+  ModeSyncSchedule syncSchedule;  // Used while synchronized changes are on and the clock is set
   bool isCharging;
   bool wasCharging;
 
