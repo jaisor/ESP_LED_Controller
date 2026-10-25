@@ -53,6 +53,7 @@ private:
   unsigned long lastModeChangeMs = 0;
   
   AsyncWebServer* server;
+  bool serverStarted = false;  // Routes are registered once; the server stays up across WiFi drops
 
   JsonDocument configJson;
   JsonDocument deviceJson;
@@ -60,6 +61,7 @@ private:
   String currentIP();
   void connect();
   void listen();
+  void startServer();
 
   void handleRoot(AsyncWebServerRequest *request);
   void handleWifi(AsyncWebServerRequest *request);

@@ -165,6 +165,9 @@ void CWifiManager::connect() {
       default: txPower = WIFI_POWER_19_5dBm; // 19.5dBm
     }
     WiFi.setTxPower(txPower);
+    // Modem sleep (the ESP32 default) misses ARP requests and incoming connections between beacons;
+    // with some routers the device stays unreachable while its own MQTT connection keeps working
+    WiFi.setSleep(false);
 #elif defined(ESP8266)
     float txPower = 20.5; // default 
     switch (configuration.wifiPower) {
@@ -207,6 +210,39 @@ void CWifiManager::connect() {
 void CWifiManager::listen() {
 
   status = WF_LISTENING;
+  if (!serverStarted) {
+    serverStarted = true;
+    startServer();
+  }
+  Log.infoln("Web server listening on http://%s:%i", currentIP().c_str(), WEB_SERVER_PORT);
+
+  deviceJson["ip"] = currentIP();
+  deviceJson["mac_address"] = WiFi.macAddress();
+
+  #ifdef OLED
+  if (device) {
+    if (isApMode()) {
+      device->setWifiAPInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
+    } else {
+      device->setWifiConnectedInfo(WiFi.localIP().toString().c_str());
+    }
+  }
+  #endif
+
+  // NTP - Using POSIX timezone string for automatic DST handling
+  const char* timezone = getTzString(configuration.gmtOffset_sec);
+  Log.infoln("Configuring time from %s with timezone %s (GMT offset: %i)", configuration.ntpServer, timezone, configuration.gmtOffset_sec);
+  configTzTime(timezone, configuration.ntpServer);
+  struct tm timeinfo;
+  if(getLocalTime(&timeinfo, 100)){ // Short timeout - NTP may not be available in AP mode
+    Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
+  }
+  CONFIG_getLedBrightness(true);
+}
+
+// Runs once. The server listens on any address, so it keeps working across WiFi drops; restarting it
+// on reconnect fails to bind port 80 while earlier connections are still open or in TIME_WAIT.
+void CWifiManager::startServer() {
   // Web
   server->on("/", HTTP_GET | HTTP_POST, [this](AsyncWebServerRequest *request) { handleRoot(request); });
   server->on("/style.css", HTTP_GET, [this](AsyncWebServerRequest *request) { handleStyleCSS(request); });
@@ -277,30 +313,6 @@ void CWifiManager::listen() {
   server->addHandler(handler);
 
   server->begin();
-  Log.infoln("Web server listening on http://%s:%i", currentIP().c_str(), WEB_SERVER_PORT);
-
-  deviceJson["ip"] = currentIP();
-  deviceJson["mac_address"] = WiFi.macAddress();
-  
-  #ifdef OLED
-  if (device) {
-    if (isApMode()) {
-      device->setWifiAPInfo(softAP_SSID, WIFI_FALLBACK_PASS, WiFi.softAPIP().toString().c_str());
-    } else {
-      device->setWifiConnectedInfo(WiFi.localIP().toString().c_str());
-    }
-  }
-  #endif
-  
-  // NTP - Using POSIX timezone string for automatic DST handling
-  const char* timezone = getTzString(configuration.gmtOffset_sec);
-  Log.infoln("Configuring time from %s with timezone %s (GMT offset: %i)", configuration.ntpServer, timezone, configuration.gmtOffset_sec);
-  configTzTime(timezone, configuration.ntpServer);
-  struct tm timeinfo;
-  if(getLocalTime(&timeinfo, 100)){ // Short timeout - NTP may not be available in AP mode
-    Log.noticeln("The time is %i:%i", timeinfo.tm_hour,timeinfo.tm_min);
-  }
-  CONFIG_getLedBrightness(true);
 
   // OTA
   ElegantOTA.begin(server);
@@ -404,7 +416,6 @@ void CWifiManager::loop() {
     switch (status) {
       case WF_LISTENING: {
       Log.infoln("Disconnecting %i", status);
-      server->end();
       status = WF_CONNECTING;
       connect();
       } break;
