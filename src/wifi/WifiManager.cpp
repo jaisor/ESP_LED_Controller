@@ -5,7 +5,8 @@
 #include <Arduino.h>
 #include <WiFiClient.h>
 #include <time.h>
-#include <ElegantOTA.h>
+//#include <ElegantOTA.h>
+#include <ElegantOTAPro.h>
 #include <StreamUtils.h>
 #include <AsyncJson.h>
 #include <version.h>
