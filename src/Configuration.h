@@ -102,6 +102,12 @@
       #define LED_PIN GPIO_NUM_2
       #define LED_PIN_2 GPIO_NUM_4
       #define LED_PIN_LIST(X) X(0) X(1) X(2) X(3) X(4) X(5) X(6) X(7) X(8) X(9) X(10) X(20) X(21)
+    #elif defined(ARDUINO_XIAO_ESP32S3)
+      // GPIO 3 = D2, GPIO 4 = D3
+      #define LED_PIN GPIO_NUM_3
+      #define LED_PIN_2 GPIO_NUM_4
+      // The header's pads (D0-D5 = 1-6, D6 = TX 43, D7 = RX 44, D8-D10 = 7-9); GPIO 21 is the user LED
+      #define LED_PIN_LIST(X) X(1) X(2) X(3) X(4) X(5) X(6) X(7) X(8) X(9) X(43) X(44)
     #elif defined(CONFIG_IDF_TARGET_ESP32S3)
       #define LED_PIN GPIO_NUM_2
       #define LED_PIN_2 GPIO_NUM_4

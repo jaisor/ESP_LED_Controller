@@ -51,6 +51,8 @@ By default the LEDs data is connected to pin 12 on the ESP, but most other GPIO 
 
 __LED data pin = 12__ - GPIO12 - above VIN (5V), GND and GPIO13
 
+On the ESP32-S3 (`esp32s3`) the default is GPIO2. On the Seeed Studio XIAO ESP32S3 (`seeed_xiao_esp32s3`) it is GPIO3, pad __D2__. On both, a second strip defaults to GPIO4 (__D3__ on the XIAO). The XIAO's LED setup page lists only the pads on its header: D0-D10 (GPIO 1-9, 43, 44). Its WiFi power defaults to the maximum, 19.5dBm.
+
 After first boot, open `http://<device_ip>/led` (or ⚙️ → LED Setup) and set:
 * Layout: __Ring light__
 * Total LEDs: __267__, outer ring LEDs: __141__

@@ -102,7 +102,9 @@ void EEPROM_loadConfig() {
       strcpy(configuration.ntpServer, NTP_SERVER);
       configuration.gmtOffset_sec = NTP_GMT_OFFSET_SEC;
       configuration.daylightOffset_sec = NTP_DAYLIGHT_OFFSET_SEC;
-      #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
+      #if defined(ARDUINO_XIAO_ESP32S3)
+        configuration.wifiPower = 78; // Max: WIFI_POWER_19_5dBm (19.5dBm)
+      #elif defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32S3)
         configuration.wifiPower = 34; // ESP32-C3 default: WIFI_POWER_8_5dBm (8.5dBm)
       #else
         configuration.wifiPower = 82;
@@ -362,7 +364,7 @@ unsigned long CONFIG_getUpTime() {
 static bool isIntLEDOn = false;
 void intLEDOn() {
   if (configuration.ledEnabled) {
-    #if (defined(SEEED_XIAO_M0) || defined(ESP8266))
+    #if (defined(SEEED_XIAO_M0) || defined(ARDUINO_XIAO_ESP32S3) || defined(ESP8266))  // Active-low LED
       digitalWrite(INTERNAL_LED_PIN, LOW);
     #else
       digitalWrite(INTERNAL_LED_PIN, HIGH);
@@ -374,7 +376,7 @@ void intLEDOn() {
 }
 
 void intLEDOff() {
-  #if (defined(SEEED_XIAO_M0) || defined(ESP8266))
+  #if (defined(SEEED_XIAO_M0) || defined(ARDUINO_XIAO_ESP32S3) || defined(ESP8266))  // Active-low LED
     digitalWrite(INTERNAL_LED_PIN, HIGH);
   #else
     digitalWrite(INTERNAL_LED_PIN, LOW);
