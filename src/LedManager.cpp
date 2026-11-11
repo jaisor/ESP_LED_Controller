@@ -14,6 +14,7 @@
 #include "modes/WhiteLightMode.h"
 #include "modes/PixelSeparatorMode.h"
 #include "modes/CustomMode.h"
+#include "ModeCycle.h"
 
 #if FASTLED_HAS_CHANNELS && FASTLED_RMT5
   #include "platforms/esp/32/drivers/rmt/rmt_5/rmt_memory_manager.h"
@@ -173,7 +174,7 @@ static inline CRGB toWireOrder(const CRGB &c, uint8_t order) {
 
 CLEDManager::CLEDManager()
 : leds(nullptr), hwLeds(nullptr), renderSize(0), hwSize(0), layout(LED_LAYOUT_SINGLE), colorOrder(static_cast<uint8_t>(RGB)), mirror(false),
-  chargingMode(nullptr), tsCycleMs(0), cycleIndex(0), isCharging(false), wasCharging(false) {}
+  chargingMode(nullptr), tsCycleMs(0), isCharging(false), wasCharging(false) {}
 
 CLEDManager::~CLEDManager() {
   for (auto *mode : modes) {
@@ -338,7 +339,9 @@ void CLEDManager::registerModes() {
   // empty slots and effects that don't fit the layout report themselves unavailable.
   // New built-in modes go after these.
   for (uint8_t slot = 0; slot < CUSTOM_MODE_COUNT; slot++) {
-    modes.push_back(new CCustomMode(n, outer, slot, layout == LED_LAYOUT_RING));
+    CCustomMode *mode = new CCustomMode(n, outer, slot, layout == LED_LAYOUT_RING);
+    mode->setSourceModes(&modes);  // The two-modes effect plays other registered modes
+    modes.push_back(mode);
   }
 }
 
@@ -399,28 +402,46 @@ void CLEDManager::updateModeCycling() {
     return;
   }
 
-  if (millis() - tsCycleMs <= configuration.ledCycleModeMs) {
-    return;
+  // Synchronized: on the clock's minute grid. Without the time (no NTP answer since boot) the plain
+  // timer carries on, counting from when synchronizing stopped.
+  if (configuration.ledCycleSync && CONFIG_isTimeSynced()) {
+    if (!syncSchedule.due(time(nullptr), configuration.ledCycleModeMs, configuration.ledMode, MODE_SYNC_MIN_LEAD_S)) {
+      return;
+    }
+  } else {
+    if (syncSchedule.active) {
+      syncSchedule.stop();
+      tsCycleMs = millis();
+    }
+    if (millis() - tsCycleMs <= configuration.ledCycleModeMs) {
+      return;
+    }
   }
 
   tsCycleMs = millis();
 
-  // Step to the next mode that fits this layout, from the custom list if it has any such mode
-  bool found = false;
-  for (uint8_t i = 0; i < configuration.cycleModesCount && !found; i++) {
-    cycleIndex = (cycleIndex + 1) % configuration.cycleModesCount;
-    if (isModeAvailable(configuration.cycleModesList[cycleIndex])) {
-      configuration.ledMode = configuration.cycleModesList[cycleIndex];
-      found = true;
-    }
+  uint8_t next = nextCycleMode(configuration.ledMode, configuration.cycleModesList, configuration.cycleModesCount,
+    modes.size(), [this](uint8_t mode) { return isModeAvailable(mode); });
+  if (next == configuration.ledMode) {
+    return;  // A single selected mode: nothing to switch to
   }
-  for (size_t i = 0; i < modes.size() && !found; i++) {
-    configuration.ledMode = (configuration.ledMode + 1) % modes.size();
-    found = isModeAvailable(configuration.ledMode);
-  }
+  configuration.ledMode = next;
+  syncSchedule.changedTo(next);
 
   if (onModeChange) {
     onModeChange();
   }
   Log.verboseln("Switching modes to '%s'", modes[configuration.ledMode]->getName().c_str());
+}
+
+long CLEDManager::secondsToNextChange() {
+  if (configuration.ledCycleModeMs == 0) {
+    return -1;
+  }
+  if (syncSchedule.active && configuration.ledCycleSync && CONFIG_isTimeSynced()) {
+    long remaining = (long)(syncSchedule.next - time(nullptr));
+    return remaining > 0 ? remaining : 0;
+  }
+  unsigned long elapsed = millis() - tsCycleMs;
+  return elapsed < configuration.ledCycleModeMs ? (configuration.ledCycleModeMs - elapsed) / 1000 : 0;
 }

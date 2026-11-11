@@ -53,6 +53,7 @@ private:
   unsigned long lastModeChangeMs = 0;
   
   AsyncWebServer* server;
+  bool serverStarted = false;  // Routes are registered once; the server stays up across WiFi drops
 
   JsonDocument configJson;
   JsonDocument deviceJson;
@@ -60,6 +61,7 @@ private:
   String currentIP();
   void connect();
   void listen();
+  void startServer();
 
   void handleRoot(AsyncWebServerRequest *request);
   void handleWifi(AsyncWebServerRequest *request);
@@ -70,6 +72,7 @@ private:
   void handleCustomModeUpdate(AsyncWebServerRequest *request, JsonObject body);
   String customModesPageJson(int savedSlot = -1);
   int customModeIndex(uint8_t slot);
+  bool isComboSource(int index, const configuration_t &c, int self);
   void handleFactoryReset(AsyncWebServerRequest *request);
   void handleReboot(AsyncWebServerRequest *request);
   void handleStyleCSS(AsyncWebServerRequest *request);
@@ -85,6 +88,8 @@ private:
   bool isApMode();
 
   bool isMqttConfigured();
+  bool isModeSyncAllowed(String *reason = nullptr);
+  std::function<long()> nextModeChange;  // Seconds to the next automatic mode change, -1 for none
   String mqttTopic(const char *suffix);
   void mqttLoop();
   void mqttConnect();
@@ -115,6 +120,7 @@ public:
 
   void setModes(std::vector<CBaseMode*> *modes, uint8_t layout) { this->modes = modes; this->ledLayout = layout; }
   void updateModeChangeTime() { lastModeChangeMs = millis(); }
+  void setNextModeChangeProvider(std::function<long()> provider) { nextModeChange = provider; }
 
   void setDevice(CDevice* device) { this->device = device; };
 };
